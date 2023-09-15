@@ -27,9 +27,9 @@ def play(competition, tournament, number_matches):
 def analyze(competition, tournament):
     """Analyze player performance."""
 
-    print(f"\nAnalyzing players")
 
     tournament_state = load_tournament(competition, tournament)
+    print(f"\nAnalyzing {len(tournament_state['players'])} players")
 
     dump, _analysis = analyze_players(tournament_state)
     print(dump)

@@ -161,3 +161,11 @@ cython_debug/
 
 .env
 credentials/
+
+# Mac
+.DS_Store
+
+# data
+data/competitions/summarizer/performances/
+data/competitions/summarizer/tournaments/accuracy/leaderboard.json
+data/competitions/summarizer/tournaments/accuracy/matches/
