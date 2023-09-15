@@ -2,11 +2,6 @@ import os
 from tenacity import retry, wait_random_exponential, stop_after_attempt
 import anthropic
 
-
-# The Anthropic client
-_client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
-
 @retry(wait=wait_random_exponential(min=0.5, max=20), stop=stop_after_attempt(6))
 def get_claude_completion(
     prompt: str = "",
@@ -17,7 +12,8 @@ def get_claude_completion(
 ) -> str:
     """Run a prompt completion with Claude, retrying with backoff in failure case."""
     try:
-        response = _client.completions.create(
+        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        response = client.completions.create(
             prompt=prompt,
             stop_sequences=[stop],
             model=model,
