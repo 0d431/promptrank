@@ -1,0 +1,13 @@
+# Copy to .env and complete
+
+# dir we run in
+PYTHONPATH=.
+
+# OpenAI
+OPENAI_API_KEY=
+
+# Anthropic Claude
+ANTHROPIC_API_KEY=
+
+# Google Cloud Platform credentials
+GOOGLE_APPLICATION_CREDENTIALS=<path to json with credentials>
