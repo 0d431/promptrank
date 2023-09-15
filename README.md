@@ -2,6 +2,11 @@
 
 A tool to perform ELO ranking and analysis of LLM prompts.
 
+## Setup
+
+Copy `dotenv.template` to `.env` and provide your API keys / credentials for LLM providers. Currently, the tool supports OpenAI GPT, Anthropic Claude, and Google PaLM2; see `src/llm`
+
+
 ## Competitions
 
 You will define a **competition** that reflects a type of task to be performed by the LLM, e.g. summarization of text. Within the competition, you define **players** that participate, consisting of the respective LLM and temperature/prompt, as well as **challenges** that are different input specimen for the players to perform on.
