@@ -131,7 +131,7 @@ def run_match(tournament_state):
         # perform performances if needed
         performances = {}
         for player in (player_A, player_B):
-            performance_file = f"data/competitions/{tournament_state['meta']['competition']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
+            performance_file = f"competitions/{tournament_state['meta']['competition']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
             if not os.path.exists(performance_file):
                 # create the performance
                 print(f"      rendering performance of {player['name']} for {challenge_name}")
@@ -177,7 +177,7 @@ def run_match(tournament_state):
 
         # store the match
         with open(
-            f"data/competitions/{tournament_state['meta']['competition']}/tournaments/{tournament_state['meta']['tournament']}/matches/{id}.json",
+            f"competitions/{tournament_state['meta']['competition']}/tournaments/{tournament_state['meta']['tournament']}/matches/{id}.json",
             "w",
         ) as file:
             json.dump(match, file, indent=2)

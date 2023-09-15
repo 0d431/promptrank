@@ -11,7 +11,7 @@ Copy `dotenv.template` to `.env` and provide your API keys / credentials for LLM
 
 You will define a **competition** that reflects a type of task to be performed by the LLM, e.g. summarization of text. Within the competition, you define **players** that participate, consisting of the respective LLM and temperature/prompt, as well as **challenges** that are different input specimen for the players to perform on.
 
-See `data/competitions/summarizer/players/simple-davinci.yaml` for a trivial summarizer using `text-davinci-003`:
+See `competitions/example/players/simple-davinci.yaml` for a trivial summarizer using `text-davinci-003`:
 
 ```yaml
 ---
@@ -27,13 +27,13 @@ See `data/competitions/summarizer/players/simple-davinci.yaml` for a trivial sum
         Summary:
 ```
 
-Texts to summarize are provided in `data/competitions/summarizer/challenges`.
+Texts to summarize are provided in `competitions/example/challenges`.
 
 ## Tournaments
 
 Next, you set up one or more **tournaments** within the competition, which evaluates the performance of player using a pair-wise **evaluation** prompt. To prevent ordering bias, all pair-wise evaluations are performed twice, in forward and reverse order, and a winner is only called if both evals name it, else the match is a draw.
 
-For example, the evalution may judge the comparative accuracy of the summarization of text, as in `data/competitions/summarizer/tournaments/accuracy/evaluation.yaml`:
+For example, the evalution may judge the comparative accuracy of the summarization of text, as in `competitions/example/tournaments/accuracy/evaluation.yaml`:
 
 ```yaml
 ---

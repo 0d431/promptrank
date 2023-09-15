@@ -20,12 +20,12 @@ def load_tournament(competition, tournament):
     )
 
     # check if competition exists
-    if not os.path.exists(f"data/competitions/{competition}"):
+    if not os.path.exists(f"competitions/{competition}"):
         print(f"Competition {competition} does not exist")
-        return
+        exit(-1)
 
     # load the players
-    for player_filename in glob.glob(f"data/competitions/{competition}/players/*.yaml"):
+    for player_filename in glob.glob(f"competitions/{competition}/players/*.yaml"):
         with open(player_filename, "r") as file:
             player_name = player_filename.split("/")[-1].split(".")[0]
             tournament_state["players"][player_name] = yaml.safe_load(file)
@@ -38,7 +38,7 @@ def load_tournament(competition, tournament):
 
     # load the challenges
     for challenge_filename in glob.glob(
-        f"data/competitions/{competition}/challenges/*.yaml"
+        f"competitions/{competition}/challenges/*.yaml"
     ):
         with open(challenge_filename, "r") as file:
             challenge_name = challenge_filename.split("/")[-1].split(".")[0]
@@ -51,13 +51,13 @@ def load_tournament(competition, tournament):
     print(f"    loaded {len(tournament_state['challenges'])} challenges")
 
     # check if tournament exists
-    if not os.path.exists(f"data/competitions/{competition}/tournaments/{tournament}"):
+    if not os.path.exists(f"competitions/{competition}/tournaments/{tournament}"):
         print(f"Tournament {tournament} does not exist")
-        return
+        exit(-1)
 
     # load the evaluation
     eval_filename = (
-        f"data/competitions/{competition}/tournaments/{tournament}/evaluation.yaml"
+        f"competitions/{competition}/tournaments/{tournament}/evaluation.yaml"
     )
     eval_time = os.path.getmtime(eval_filename)
     with open(eval_filename, "r") as file:
@@ -66,7 +66,7 @@ def load_tournament(competition, tournament):
     # load the matches
     tournament_state["matches"] = {}
     for match_filename in glob.glob(
-        f"data/competitions/{competition}/tournaments/{tournament}/matches/*.json"
+        f"competitions/{competition}/tournaments/{tournament}/matches/*.json"
     ):
         with open(match_filename, "r") as file:
             match_time = os.path.getmtime(match_filename)
@@ -95,7 +95,7 @@ def load_tournament(competition, tournament):
 
     # clean up performances that are older than the respective player or challenge
     for performance_filename in glob.glob(
-        f"data/competitions/{competition}/performances/*.json"
+        f"competitions/{competition}/performances/*.json"
     ):
         performance_time = os.path.getmtime(performance_filename)
         performance_name = performance_filename.split("/")[-1].split(".")[0]
@@ -134,7 +134,7 @@ def save_tournament(tournament_state):
 
     # write the leaderboard ordered by descending elo
     with open(
-        f"data/competitions/{competition}/tournaments/{tournament}/leaderboard.json",
+        f"competitions/{competition}/tournaments/{tournament}/leaderboard.json",
         "w",
     ) as file:
         json.dump(

@@ -166,6 +166,8 @@ credentials/
 .DS_Store
 
 # data
-data/competitions/summarizer/performances/
-data/competitions/summarizer/tournaments/accuracy/leaderboard.json
-data/competitions/summarizer/tournaments/accuracy/matches/
+competitions/*
+!competitions/example
+competitions/example/performances/*.json
+competitions/example/tournaments/accuracy/matches/*.json
+competitions/example/tournaments/accuracy/leaderboard.json
