@@ -45,7 +45,7 @@ def get_gpt_completions(
 
 
 @retry(
-    wait=wait_random_exponential(min=0.5, max=20),
+    wait=wait_random_exponential(min=0.5, max=30),
     stop=stop_after_attempt(5),
     retry=retry_if_not_exception_type(openai.error.InvalidRequestError),
 )
@@ -53,17 +53,14 @@ def get_gpt_chat_completion(
     system: str = "", prompt: str = "", temperature=0.0, max_tokens=50, model="gpt-4"
 ) -> str:
     """Run a prompt completion with OpenAI chat, retrying with backoff in failure case."""
-    try:
-        response = openai.ChatCompletion.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+    response = openai.ChatCompletion.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
 
-        return response["choices"][0]["message"]["content"].strip(" \n")
-    except Exception as ex:
-        raise ex
+    return response["choices"][0]["message"]["content"].strip(" \n")

@@ -119,32 +119,6 @@ def load_tournament(competition, tournament):
         / 2
         * len(tournament_state["challenges"])
     )
-
     print(f"    {len(tournament_state['matches'])} of {tournament_state['meta']['pairings']} matches played")
 
     return tournament_state
-
-
-##############################################
-def save_tournament(tournament_state):
-    """Persist the updated matches and the leaderboard"""
-
-    competition = tournament_state["meta"]["competition"]
-    tournament = tournament_state["meta"]["tournament"]
-
-    # write the leaderboard ordered by descending elo
-    with open(
-        f"competitions/{competition}/tournaments/{tournament}/leaderboard.json",
-        "w",
-    ) as file:
-        json.dump(
-            dict(
-                sorted(
-                    tournament_state["leaderboard"].items(),
-                    key=lambda x: x[1]["elo"],
-                    reverse=True,
-                )
-            ),
-            file,
-            indent=2,
-        )

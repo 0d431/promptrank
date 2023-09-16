@@ -2,8 +2,8 @@ import re
 import os
 import json
 import random
+import concurrent.futures
 from llm import complete
-from tournament import save_tournament
 from leaderboard import update_leaderboard
 
 
@@ -92,24 +92,35 @@ def _evaluate(
     if len(output_A) == 0 or len(output_B) == 0:
         return "Either player failed to produce output", "DNP"
 
-    # avoid lexical bias
-    assessment_1, winner_1 = _do_evaluate(
-        tournament_state, challenge, player_A_name, output_A, player_B_name, output_B
-    )
-    assessment_2, winner_2 = _do_evaluate(
-        tournament_state, challenge, player_B_name, output_B, player_A_name, output_A
-    )
+    # avoid lexical bias, so we run two evaluations with the players swapped
+    args = [
+        (tournament_state, challenge, player_A_name, output_A, player_B_name, output_B),
+        (tournament_state, challenge, player_B_name, output_B, player_A_name, output_A),
+    ]
+    evaluations = [(None, None), (None, None)]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_to_ix = {
+            executor.submit(_do_evaluate, *arg): ix for ix, arg in enumerate(args)
+        }
+        for future in concurrent.futures.as_completed(future_to_ix):
+            evaluations[future_to_ix[future]] = future.result()
 
+    assessment_1, winner_1 = evaluations[0]
+    assessment_2, winner_2 = evaluations[1]
+
+    # one draw is enough to call it a draw
     if winner_1 == "DRAW":
         return winner_1, assessment_1
     elif winner_2 == "DRAW":
         return winner_2, assessment_2
+    # check for inconclusive non-draw assessments
     elif winner_1 != winner_2:
         return (
             "DRAW",
-            f"Inconclusive assessments: {assessment_1} <--VS--> {assessment_2}",
+            f"Inconclusive assessments: {assessment_1} <--VS--> {assessment_2.replace('Player A', 'Player X').replace('Player B', 'Player A').replace('Player X', 'Player B')}",
         )
     else:
+        # unanimous winner
         return assessment_1, winner_1
 
 
@@ -119,10 +130,13 @@ def run_match(tournament_state):
 
     # find next match
     challenge_name, player_A_name, player_B_name = _find_match(tournament_state)
+
     if challenge_name is not None:
         # play the next match
         id = _get_match_id(challenge_name, player_A_name, player_B_name)
-        print(f"    playing match {player_A_name} vs {player_B_name} on challenge {challenge_name}")
+        print(
+            f"    playing match {player_A_name} vs {player_B_name} on challenge {challenge_name}"
+        )
 
         challenge = tournament_state["challenges"][challenge_name]
         player_A = tournament_state["players"][player_A_name]
@@ -134,7 +148,9 @@ def run_match(tournament_state):
             performance_file = f"competitions/{tournament_state['meta']['competition']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
             if not os.path.exists(performance_file):
                 # create the performance
-                print(f"      rendering performance of {player['name']} for {challenge_name}")
+                print(
+                    f"      rendering performance of {player['name']} for {challenge_name}"
+                )
                 performances[player["name"]] = {
                     "player": player["name"],
                     "challenge": challenge,
@@ -184,6 +200,3 @@ def run_match(tournament_state):
 
         # update leaderboard
         update_leaderboard(tournament_state, match)
-
-    # store the match
-    save_tournament(tournament_state)

@@ -1,13 +1,10 @@
-import os
-import argparse
-
 import dotenv
-
 dotenv.load_dotenv()
 
+import argparse
 from match import run_match
 from tournament import load_tournament
-from analyze import analyze_players
+from analyze import analyze_players, plot_elo_history
 
 
 def play(competition, tournament, number_matches):
@@ -24,18 +21,26 @@ def play(competition, tournament, number_matches):
     )
 
 
-def analyze(competition, tournament):
+def analyze(competition, tournament, write_file):
     """Analyze player performance."""
-
 
     tournament_state = load_tournament(competition, tournament)
     print(f"\nAnalyzing {len(tournament_state['players'])} players")
 
     dump, _analysis = analyze_players(tournament_state)
-    print(dump)
+
+    if write_file:
+        with open(f"competitions/{competition}/tournaments/{tournament}/analysis.md", "w") as f:
+            f.write(dump + "\n\n### ELO score development\n![ELO Development](./elo_history.png)")
+
+        plot_elo_history(tournament_state, f"competitions/{competition}/tournaments/{tournament}/elo_history.png")
+    else:
+        print(dump)
 
 
 def main():
+    """Command-line interface."""
+
     parser = argparse.ArgumentParser(description="Promptrank Command-Line Interface")
     parser.add_argument("competition", type=str, help="Name of the competition.")
     parser.add_argument("tournament", type=str, help="Name of the tournament.")
@@ -49,14 +54,22 @@ def main():
     )
 
     # 'analyze' command parser
-    subparsers.add_parser("analyze", help="Analyze player performance.")
+    analyze_parser = subparsers.add_parser(
+        "analyze", help="Analyze player performance."
+    )
+    analyze_parser.add_argument(
+        "-w",
+        "--write_file",
+        action="store_true",
+        help="If set, write analysis to analysis.md in tournament directory.",
+    )
 
     args = parser.parse_args()
 
     if args.command == "play":
         play(args.competition, args.tournament, args.number)
     elif args.command == "analyze":
-        analyze(args.competition, args.tournament)
+        analyze(args.competition, args.tournament, args.write_file)
     else:
         print("Invalid command. Use -h for help.")
 

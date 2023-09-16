@@ -1,97 +1,6 @@
-# 🤖🏆 promptrank
 
-A tool to perform ELO ranking and analysis of LLM prompts.
-
-## Setup
-
-Copy `dotenv.template` to `.env` and provide your API keys / credentials for LLM providers. Currently, the tool supports OpenAI GPT, Anthropic Claude, and Google PaLM2; see `src/llm`
-
-
-## Competitions
-
-You will define a **competition** that reflects a type of task to be performed by the LLM, e.g. summarization of text. Within the competition, you define **players** that participate, consisting of the respective LLM and temperature/prompt, as well as **challenges** that are different input specimen for the players to perform on.
-
-See `competitions/example/players/simple-davinci.yaml` for a trivial summarizer using `text-davinci-003`:
-
-```yaml
----
-    model: text-davinci-003
-    temperature: 0.0
-    prompt: |-
-        Write a summary of the following web page:
-        
-        ===BEGIN===
-        {input}
-        ===END===
-        
-        Summary:
-```
-
-Texts to summarize are provided in `competitions/example/challenges`.
-
-## Tournaments
-
-Next, you set up one or more **tournaments** within the competition, which evaluates the performance of player using a pair-wise **evaluation** prompt. To prevent ordering bias, all pair-wise evaluations are performed twice, in forward and reverse order, and a winner is only called if both evals name it, else the match is a draw.
-
-For example, the evalution may judge the comparative accuracy of the summarization of text, as in `competitions/example/tournaments/accuracy/evaluation.yaml`:
-
-```yaml
----
-name: Accuracy
-description: Evaluate the accuracy of a summarizer
-model: gpt-4
-temperature: 0.0
-objective: create a maximally accurate, faithful and precise summary of a given input text
-system: |-
-  You are a judge in a competition, known for the diligence and consistency of your evaluations.
-  
-  The objective of players in the competition is to create a maximally accurate, faithful and precise summary of a given input text. 
-
-  You shall provide a comparative evaluation of the performance of two players, determining which player wins due to their superior output. If both players perform equally, you declare a draw.
-  
-  The evaluation criteria, in order of importance, are:
-    1. Summaries do not contain any misrepresentations or factually wrong reproduction of facts from the original text.
-    2. Summaries rely only and exclusively the original text and contain no additional information.
-    3. Summaries add no interpretation or commentary to the original text.
-
-  You provide your evaluation in the form of a brief qualitative assessment of the relative performance of players, followed by declaring the winner, in this structure:
-
-  Assessment: <one sentence assessment of performance>
-  Winner: <A | B | DRAW>
-
-  For example:
-
-  Assessment: Player A's summary contains additional information not mentioned in the original text, while player B's summary is extremely faithful to the original input and reproduces all relevant facts.
-  Winner: B
-prompt: |-
-  Input text:
-  ===START===
-  {input}
-  ===END===
-
-  Summary of player A:
-  ===START===
-  {output_A}
-  ===END===
-
-  Summary of player B:
-  ===START===
-  {output_B}
-  ===END===
-```
-
-## Playing matches
-
-Then, you run the tournament by playing matches: `promptrank summarizer accuracy play -n 10`
-
-The tournament will exhaustively play and evaluate all possible combinations (or stop after the given number of matches). It calculates ELO scores of players and write a **leaderboard** into the tournament directory. Tournament state is persistet and matches can be played incrementally; when starting a new round of matches, all previous results that are obsolete (due to updated players, challenges, or evaluation definitions) are automatically discarded and re-run.
-
-## Analyzing player performance
-
-Finally, you can analyze performance of players with their strengths and weakness: `promptrank summarizer accuracy analyze -w`
-
-This will result in a markdown file `analysis.md` in the tourname directory (omit `-w` to get markdown to console):
-
+# EXAMPLE competition
+## ACCURACY tournament
 6 players, 3 challenges, 45 out of 45 matches played
 
 | Player | ELO | Score | Analysis |
@@ -105,4 +14,4 @@ This will result in a markdown file `analysis.md` in the tourname directory (omi
 
 
 ### ELO score development
-![ELO Development](./competitions/example/tournaments/accuracy/elo_history.png)
+![ELO Development](./elo_history.png)
