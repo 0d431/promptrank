@@ -11,7 +11,6 @@ from leaderboard import update_leaderboard
 def _get_match_id(challenge_name, player_A_name, player_B_name):
     """Generate a unique ID for a match"""
 
-    player_A_name, player_B_name = sorted([player_A_name, player_B_name])
     return challenge_name + ":" + player_A_name + "<>" + player_B_name
 
 
@@ -34,7 +33,7 @@ def _find_match(tournament_state):
     for challenge_name in _randomize(tournament_state["challenges"].keys()):
         for player_A_name in _randomize(tournament_state["players"].keys()):
             for player_B_name in _randomize(tournament_state["players"].keys()):
-                if player_A_name < player_B_name:
+                if player_A_name != player_B_name:
                     if (
                         _get_match_id(challenge_name, player_A_name, player_B_name)
                         not in tournament_state["matches"]
@@ -45,7 +44,7 @@ def _find_match(tournament_state):
 
 
 ##############################################
-def _do_evaluate(
+def _evaluate(
     tournament_state, challenge, player_A_name, output_A, player_B_name, output_B
 ):
     """Perform the evaluation of a match"""
@@ -82,46 +81,33 @@ def _do_evaluate(
 
 
 ##############################################
-def _evaluate(
-    tournament_state, challenge, player_A_name, output_A, player_B_name, output_B
-):
-    """Evaluate a match, running symmetrical evaluations for fairness"""
+def _perform(tournament_state, challenge_name, player):
+    """Perform a performance for a player"""
 
-    print("    evaluating match results")
-
-    if len(output_A) == 0 or len(output_B) == 0:
-        return "Either player failed to produce output", "DNP"
-
-    # avoid lexical bias, so we run two evaluations with the players swapped
-    args = [
-        (tournament_state, challenge, player_A_name, output_A, player_B_name, output_B),
-        (tournament_state, challenge, player_B_name, output_B, player_A_name, output_A),
-    ]
-    evaluations = [(None, None), (None, None)]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        future_to_ix = {
-            executor.submit(_do_evaluate, *arg): ix for ix, arg in enumerate(args)
+    performance_file = f"competitions/{tournament_state['meta']['competition']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
+    if not os.path.exists(performance_file):
+        # create the performance
+        print(f"      rendering performance of {player['name']} for {challenge_name}")
+        challenge = tournament_state["challenges"][challenge_name]
+        performance = {
+            "player": player["name"],
+            "challenge": challenge_name,
+            "output": complete(
+                player["model"],
+                player["temperature"],
+                player["prompt"].format(**challenge),
+            ),
         }
-        for future in concurrent.futures.as_completed(future_to_ix):
-            evaluations[future_to_ix[future]] = future.result()
 
-    assessment_1, winner_1 = evaluations[0]
-    assessment_2, winner_2 = evaluations[1]
-
-    # one draw is enough to call it a draw
-    if winner_1 == "DRAW":
-        return winner_1, assessment_1
-    elif winner_2 == "DRAW":
-        return winner_2, assessment_2
-    # check for inconclusive non-draw assessments
-    elif winner_1 != winner_2:
-        return (
-            "DRAW",
-            f"Inconclusive assessments: {assessment_1} <--VS--> {assessment_2.replace('Player A', 'Player X').replace('Player B', 'Player A').replace('Player X', 'Player B')}",
-        )
+        # store the performance
+        with open(performance_file, "w") as file:
+            json.dump(performance, file, indent=2)
     else:
-        # unanimous winner
-        return assessment_1, winner_1
+        # load the performance
+        with open(performance_file, "r") as file:
+            performance = json.load(file)
+
+    return performance
 
 
 ##############################################
@@ -145,29 +131,9 @@ def run_match(tournament_state):
         # perform performances if needed
         performances = {}
         for player in (player_A, player_B):
-            performance_file = f"competitions/{tournament_state['meta']['competition']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
-            if not os.path.exists(performance_file):
-                # create the performance
-                print(
-                    f"      rendering performance of {player['name']} for {challenge_name}"
-                )
-                performances[player["name"]] = {
-                    "player": player["name"],
-                    "challenge": challenge,
-                    "output": complete(
-                        player["model"],
-                        player["temperature"],
-                        player["prompt"].format(**challenge),
-                    ),
-                }
-
-                # store the performance
-                with open(performance_file, "w") as file:
-                    json.dump(performances[player["name"]], file, indent=2)
-            else:
-                # load the performance
-                with open(performance_file, "r") as file:
-                    performances[player["name"]] = json.load(file)
+            performances[player["name"]] = _perform(
+                tournament_state, challenge_name, player
+            )
 
         # perform the evaluation
         player_A_output = performances[player_A_name]["output"]

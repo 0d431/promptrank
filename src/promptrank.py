@@ -7,10 +7,10 @@ from tournament import load_tournament
 from analyze import analyze_players, plot_elo_history
 
 
-def play(competition, tournament, number_matches):
+def play(competition, tournament, players, number_matches):
     """Play a number of matches."""
 
-    tournament_state = load_tournament(competition, tournament)
+    tournament_state = load_tournament(competition, tournament, players)
 
     for _i in range(number_matches):
         print(f"\nPlaying match {_i + 1}/{number_matches}")
@@ -21,12 +21,12 @@ def play(competition, tournament, number_matches):
     )
 
 
-def analyze(competition, tournament, write_file):
+def analyze(competition, tournament, players, write_file):
     """Analyze player performance."""
 
-    tournament_state = load_tournament(competition, tournament)
-    print(f"\nAnalyzing {len(tournament_state['players'])} players")
+    tournament_state = load_tournament(competition, tournament, players)
 
+    print(f"\nAnalyzing {len(tournament_state['players'])} players")
     dump, _analysis = analyze_players(tournament_state)
 
     if write_file:
@@ -44,6 +44,7 @@ def main():
     parser = argparse.ArgumentParser(description="Promptrank Command-Line Interface")
     parser.add_argument("competition", type=str, help="Name of the competition.")
     parser.add_argument("tournament", type=str, help="Name of the tournament.")
+    parser.add_argument("players", type=str, help="Name of the player set file (optional).", nargs="?", default="")
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -67,9 +68,9 @@ def main():
     args = parser.parse_args()
 
     if args.command == "play":
-        play(args.competition, args.tournament, args.number)
+        play(args.competition, args.tournament, args.players, args.number)
     elif args.command == "analyze":
-        analyze(args.competition, args.tournament, args.write_file)
+        analyze(args.competition, args.tournament, args.players, args.write_file)
     else:
         print("Invalid command. Use -h for help.")
 
