@@ -30,16 +30,18 @@ def load_tournament(competition, tournament, player_set=""):
 
     # obtain the valid player globs
     player_globs = ["*"]
+    tournament_state["meta"]["player_set"] = player_set
+
     if player_set != "":
         if not os.path.exists(
-            f"competitions/{competition}/tournaments/{tournament}/{player_set}.players"
+            f"competitions/{competition}/player_sets/{player_set}.players"
         ):
             print(f"Player set {player_set} does not exist")
             exit(-1)
 
-        print(f"    loading player set {player_set}")
+        print(f"    loading player set {player_set.upper()}")
         with open(
-            f"competitions/{competition}/tournaments/{tournament}/{player_set}.players",
+            f"competitions/{competition}/player_sets/{player_set}.players",
             "r",
         ) as f:
             # read player globs from all non-empty lines
@@ -50,12 +52,13 @@ def load_tournament(competition, tournament, player_set=""):
     # load players
     for player_filename in glob.glob(f"competitions/{competition}/players/*.yaml"):
         # is the player filename matching any of the player set globs?
-        if not any(
-            [
-                glob.fnmatch.fnmatch(player_filename.split("/")[-1], player_glob)
-                for player_glob in player_globs
-            ]
-        ):
+        played_is_in = False
+        for player_glob in player_globs:
+            direction, pattern = (False, player_glob[1:]) if player_glob.startswith("!") else (True, player_glob)
+            if glob.fnmatch.fnmatch(player_filename.split("/")[-1], pattern):
+                played_is_in = direction
+
+        if not played_is_in:
             continue
 
         with open(player_filename, "r") as file:

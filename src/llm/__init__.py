@@ -13,6 +13,7 @@ def complete(model, temperature, prompt, system=""):
         "gpt-3.5-turbo": get_gpt_chat_completion,
         "gpt-4": get_gpt_chat_completion,
         "text-davinci-003": get_gpt_completion,
+        "gpt-3.5-turbo-instruct": get_gpt_completion,
         "text-bison@001": get_palm_completion,
     }
     chat_models = ["gpt-3.5-turbo", "gpt-4"]
@@ -27,7 +28,7 @@ def complete(model, temperature, prompt, system=""):
             prompt=prompt,
             model=model,
             temperature=temperature,
-            max_tokens=500,
+            max_tokens=750,
             system=system,
         )
     else:

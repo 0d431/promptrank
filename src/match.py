@@ -2,7 +2,8 @@ import re
 import os
 import json
 import random
-import concurrent.futures
+import datetime
+import numpy as np
 from llm import complete
 from leaderboard import update_leaderboard
 
@@ -22,7 +23,7 @@ def _get_performance_id(challenge_name, player_name):
 
 
 ##############################################
-def _find_match(tournament_state):
+def _find_match(tournament_state, min_matches_to_play):
     """Find the next match to play"""
 
     def _randomize(it):
@@ -30,17 +31,46 @@ def _find_match(tournament_state):
         random.shuffle(l)
         return l
 
-    for challenge_name in _randomize(tournament_state["challenges"].keys()):
-        for player_A_name in _randomize(tournament_state["players"].keys()):
-            for player_B_name in _randomize(tournament_state["players"].keys()):
-                if player_A_name != player_B_name:
-                    if (
-                        _get_match_id(challenge_name, player_A_name, player_B_name)
-                        not in tournament_state["matches"]
-                    ):
-                        return challenge_name, player_A_name, player_B_name
+    # find the number of matches played among players
+    labels = list(tournament_state["players"].keys())
+    matches = np.zeros(
+        (len(tournament_state["players"]), len(tournament_state["players"]))
+    )
 
-    return None, None, None
+    for match in tournament_state["matches"].values():
+        player_A_ix = labels.index(match["player_A"]["name"])
+        player_B_ix = labels.index(match["player_B"]["name"])
+
+        matches[player_A_ix, player_B_ix] += 1
+        matches[player_B_ix, player_A_ix] += 1
+
+    # make sure to ignore diagonal
+    for i in range(len(labels)):
+        matches[i, i] = 100000
+
+    # find the pair of players with the least matches
+    min_matches = np.min(matches)
+    if min_matches >= min_matches_to_play:
+        return None, None, None, min_matches
+
+    player_A_ix, player_B_ix = np.where(matches == min_matches)
+    player_A_name = labels[player_A_ix[0]]
+    player_B_name = labels[player_B_ix[0]]
+
+    # find a random challenge that this pair has not played yet
+    for challenge_name in _randomize(tournament_state["challenges"].keys()):
+        if (
+            _get_match_id(challenge_name, player_A_name, player_B_name)
+            not in tournament_state["matches"]
+        ):
+            return challenge_name, player_A_name, player_B_name, min_matches
+        if (
+            _get_match_id(challenge_name, player_B_name, player_A_name)
+            not in tournament_state["matches"]
+        ):
+            return challenge_name, player_B_name, player_A_name, min_matches
+
+    return None, None, None, min_matches
 
 
 ##############################################
@@ -55,7 +85,7 @@ def _evaluate(
         prompt=tournament_state["evaluation"]["prompt"].format(
             **challenge, output_A=output_A, output_B=output_B
         ),
-        system=tournament_state["evaluation"]["system"],
+        system=tournament_state["evaluation"].get("system", ""),
     )
 
     match = re.search(r"(?<=Assessment: ).*?(?=\n)", evaluation)
@@ -89,6 +119,7 @@ def _perform(tournament_state, challenge_name, player):
         # create the performance
         print(f"      rendering performance of {player['name']} for {challenge_name}")
         challenge = tournament_state["challenges"][challenge_name]
+        challenge["date"] = f"{datetime.datetime.now():%Y-%m-%d}"
         performance = {
             "player": player["name"],
             "challenge": challenge_name,
@@ -111,11 +142,13 @@ def _perform(tournament_state, challenge_name, player):
 
 
 ##############################################
-def run_match(tournament_state):
+def run_match(tournament_state, min_matches):
     """Run a match between two players"""
 
     # find next match
-    challenge_name, player_A_name, player_B_name = _find_match(tournament_state)
+    challenge_name, player_A_name, player_B_name, min_played = _find_match(
+        tournament_state, min_matches
+    )
 
     if challenge_name is not None:
         # play the next match
@@ -166,3 +199,5 @@ def run_match(tournament_state):
 
         # update leaderboard
         update_leaderboard(tournament_state, match)
+
+    return min_played

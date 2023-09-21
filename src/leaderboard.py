@@ -1,5 +1,10 @@
 import json
+import random
 
+INITIAL_K = 10.0
+FINAL_K = 1.0
+INITIAL_MATCHES = 10
+TRANSITION_MATCHES = 50
 
 ##############################################
 def generate_leaderboard(tournament_state, initial_elo=1000.0):
@@ -12,7 +17,9 @@ def generate_leaderboard(tournament_state, initial_elo=1000.0):
         tournament_state["leaderboard"][player] = {
             "elo": initial_elo,
             "elo_history": [],
-            "k_factor": 50.0,
+            "score": 0.5,
+            "score_history": [],
+            "k_factor": INITIAL_K,
             "wins": 0,
             "losses": 0,
             "draws": 0,
@@ -20,7 +27,9 @@ def generate_leaderboard(tournament_state, initial_elo=1000.0):
         }
 
     # re-play match history
-    for _id, match in tournament_state["matches"].items():
+    matches = list(tournament_state["matches"].values())
+    random.shuffle(matches)
+    for match in matches:
         update_leaderboard(tournament_state, match, False)
 
     # now save
@@ -104,18 +113,24 @@ def update_leaderboard(tournament_state, match, save=True):
     player_B_stats["elo_history"].append(player_B_elo)
     player_B_stats["elo"] += player_B_k_factor * (player_B_actual - player_B_expected)
 
-    # finally re-calc K factor based on number of matches
+    # re-calc K factor based on number of matches
     def _calc_k(matches):
-        return max(50.0 / (1 + 0.1 * max(0, (matches - 20))), 10.0)
+        return max(INITIAL_K / (1 + 10.0 / TRANSITION_MATCHES * max(0, (matches - INITIAL_MATCHES))), FINAL_K)
 
     player_A_stats["k_factor"] = _calc_k(player_A_stats["matches"])
     player_B_stats["k_factor"] = _calc_k(player_B_stats["matches"])
 
-    # re-sort the leaderboard by ELO score desc
+    # update score
+    player_A_stats["score_history"].append(player_A_stats["score"])
+    player_A_stats["score"] = (1.0 * player_A_stats["wins"] + 0.5 * player_A_stats["draws"]) / player_A_stats["matches"]
+    player_B_stats["score_history"].append(player_B_stats["score"])
+    player_B_stats["score"] = (1.0 * player_B_stats["wins"] + 0.5 * player_B_stats["draws"]) / player_B_stats["matches"]
+
+    # re-sort the leaderboard by score desc
     tournament_state["leaderboard"] = dict(
         sorted(
             tournament_state["leaderboard"].items(),
-            key=lambda x: x[1]["elo"],
+            key=lambda x: x[1]["score"],
             reverse=True,
         )
     )
