@@ -6,6 +6,7 @@ import datetime
 import numpy as np
 from llm import complete
 from leaderboard import update_leaderboard
+from tournament import load_tournament, resolve_tournaments
 
 
 ##############################################
@@ -83,7 +84,11 @@ def _evaluate(
         tournament_state["evaluation"]["model"],
         tournament_state["evaluation"]["temperature"],
         prompt=tournament_state["evaluation"]["prompt"].format(
-            **challenge, output_A=output_A, output_B=output_B
+            **challenge,
+            objective=tournament_state["evaluation"]["objective"],
+            criteria=tournament_state["evaluation"]["criteria"],
+            output_A=output_A,
+            output_B=output_B,
         ),
         system=tournament_state["evaluation"].get("system", ""),
     )
@@ -117,7 +122,7 @@ def _perform(tournament_state, challenge_name, player):
     performance_file = f"competitions/{tournament_state['meta']['competition']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
     if not os.path.exists(performance_file):
         # create the performance
-        print(f"      rendering performance of {player['name']} for {challenge_name}")
+        print(f"      {player['name']} performs {challenge_name}")
         challenge = tournament_state["challenges"][challenge_name]
         challenge["date"] = f"{datetime.datetime.now():%Y-%m-%d}"
         performance = {
@@ -153,9 +158,7 @@ def run_match(tournament_state, min_matches):
     if challenge_name is not None:
         # play the next match
         id = _get_match_id(challenge_name, player_A_name, player_B_name)
-        print(
-            f"    playing match {player_A_name} vs {player_B_name} on challenge {challenge_name}"
-        )
+        print(f"    {player_A_name} vs {player_B_name} on challenge {challenge_name}")
 
         challenge = tournament_state["challenges"][challenge_name]
         player_A = tournament_state["players"][player_A_name]
@@ -199,5 +202,28 @@ def run_match(tournament_state, min_matches):
 
         # update leaderboard
         update_leaderboard(tournament_state, match)
+    else:
+        print(f"    all pairs have played at least {min_played:.0f} matches")
 
     return min_played
+
+
+##############################################
+def play(competition, tournament, player_set, number_matches):
+    """Play a number of matches."""
+
+    for tournament in resolve_tournaments(competition, tournament):
+        print(
+            f"Playing {number_matches} matches for each pair in player set {player_set.upper()} for tournament {tournament.upper()}..."
+        )
+
+        tournament_state = load_tournament(competition, tournament, player_set)
+        while True:
+            min_played = run_match(tournament_state, number_matches)
+
+            if min_played == number_matches:
+                break
+
+            print(
+                f"  {tournament.upper()} match {len(tournament_state['matches']) + 1}/{tournament_state['meta']['pairings']} - {min_played:.0f} matches played by all pairs"
+            )

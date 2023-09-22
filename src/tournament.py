@@ -6,11 +6,29 @@ from leaderboard import generate_leaderboard
 
 
 ##############################################
+def _get_name_from_path(path):
+    """Get the name of a file from its path"""
+    return ".".join(path.split("/")[-1].split(".")[:-1])
+
+
+##############################################
+def resolve_tournaments(competition, tournament):
+    """Get all tournaments of a competition"""
+    if tournament != "":
+        return [tournament]
+    else:
+        return [
+            tournament.split("/")[-1]
+            for tournament in glob.glob(f"competitions/{competition}/tournaments/*")
+        ]
+
+
+##############################################
 def load_tournament(competition, tournament, player_set=""):
     """Load the competition into a structure representing its state"""
 
     print(
-        f"Loading tournament {tournament.upper()} of competition {competition.upper()}"
+        f"  loading tournament {tournament.upper()} of competition {competition.upper()}"
     )
 
     tournament_state = dict(
@@ -30,7 +48,7 @@ def load_tournament(competition, tournament, player_set=""):
 
     # obtain the valid player globs
     player_globs = ["*"]
-    tournament_state["meta"]["player_set"] = player_set
+    tournament_state["meta"]["player_set"] = player_set if player_set != "" else "all"
 
     if player_set != "":
         if not os.path.exists(
@@ -54,7 +72,11 @@ def load_tournament(competition, tournament, player_set=""):
         # is the player filename matching any of the player set globs?
         played_is_in = False
         for player_glob in player_globs:
-            direction, pattern = (False, player_glob[1:]) if player_glob.startswith("!") else (True, player_glob)
+            direction, pattern = (
+                (False, player_glob[1:])
+                if player_glob.startswith("!")
+                else (True, player_glob)
+            )
             if glob.fnmatch.fnmatch(player_filename.split("/")[-1], pattern):
                 played_is_in = direction
 
@@ -62,7 +84,7 @@ def load_tournament(competition, tournament, player_set=""):
             continue
 
         with open(player_filename, "r") as file:
-            player_name = player_filename.split("/")[-1].split(".")[0]
+            player_name = _get_name_from_path(player_filename)
             tournament_state["players"][player_name] = yaml.safe_load(file)
             tournament_state["players"][player_name]["name"] = player_name
             tournament_state["players"][player_name]["updated"] = os.path.getmtime(
@@ -76,7 +98,7 @@ def load_tournament(competition, tournament, player_set=""):
         f"competitions/{competition}/challenges/*.yaml"
     ):
         with open(challenge_filename, "r") as file:
-            challenge_name = challenge_filename.split("/")[-1].split(".")[0]
+            challenge_name = _get_name_from_path(challenge_filename)
             tournament_state["challenges"][challenge_name] = yaml.safe_load(file)
             tournament_state["challenges"][challenge_name]["name"] = challenge_name
             tournament_state["challenges"][challenge_name][
@@ -105,7 +127,7 @@ def load_tournament(competition, tournament, player_set=""):
     ):
         with open(match_filename, "r") as file:
             match_time = os.path.getmtime(match_filename)
-            match_name = match_filename.split("/")[-1].split(".")[0]
+            match_name =_get_name_from_path(match_filename)
             match = json.load(file)
 
             # skip if either player is not in the active set
@@ -132,7 +154,7 @@ def load_tournament(competition, tournament, player_set=""):
             if match_time < max(
                 player_A_time, player_B_time, challenge_time, eval_time
             ):
-                print(f"Discarding outdated match {match_name}")
+                print(f"      discarding outdated match {match_name}")
                 del tournament_state["matches"][match_name]
                 os.remove(match_filename)
 
@@ -143,7 +165,7 @@ def load_tournament(competition, tournament, player_set=""):
         f"competitions/{competition}/performances/*.json"
     ):
         performance_time = os.path.getmtime(performance_filename)
-        performance_name = performance_filename.split("/")[-1].split(".")[0]
+        performance_name = _get_name_from_path(performance_filename)
         player_name = performance_name.split(":")[1]
         challenge_name = performance_name.split(":")[0]
 
@@ -155,7 +177,7 @@ def load_tournament(competition, tournament, player_set=""):
         challenge_time = tournament_state["challenges"][challenge_name]["updated"]
 
         if performance_time < max(player_time, challenge_time):
-            print(f"Discarding outdated performance {performance_name}")
+            print(f"      discarding outdated performance {performance_name}")
             os.remove(performance_filename)
 
     # generate the leaderboard

@@ -1,10 +1,14 @@
+import os
 import random
+import warnings
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib
 import numpy as np
 from llm import complete
+from tournament import load_tournament, resolve_tournaments
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ##############################################
 ASSESSMENT_PROMPT = """The player {player} is participating in a tournament with the aim to {objective}. The player has received the following assessments of their performance against opponents in their matches:
@@ -14,7 +18,7 @@ ASSESSMENT_PROMPT = """The player {player} is participating in a tournament with
 Silently analyze the performance of the player {player} across all these assessments. Then write one sentence to chacterise the overall profile of the player. Then add a bullet list with up to three, very detailed weaknesses of the player:"""
 
 
-def _analyze_player(tournament_state, player_name):
+def analyze_player(tournament_state, player_name):
     """Evaluate the strengths and weaknesses of a player"""
 
     # collect assessments
@@ -44,7 +48,7 @@ def _analyze_player(tournament_state, player_name):
 
         return complete(
             "gpt-4",
-            0.2,
+            1.0,
             prompt=ASSESSMENT_PROMPT.format(
                 player=player_name,
                 assessments="\n".join(["- " + a for a in assessments]),
@@ -67,14 +71,15 @@ def analyze_players(tournament_state, skip_critique):
         if skip_critique:
             critique = "n/a"
         else:
-            critique = _analyze_player(tournament_state, player_name).replace(
+            critique = analyze_player(tournament_state, player_name).replace(
                 "\n", "<br>"
             )
 
         print(f"    {player_name}")
         analysis[player_name] = {
+            "name": player_name,
             "elo": int(tournament_state["leaderboard"][player_name]["elo"]),
-            "score": tournament_state['leaderboard'][player_name]['score'],
+            "score": tournament_state["leaderboard"][player_name]["score"],
             "score_stat": f"**{tournament_state['leaderboard'][player_name]['score']:.2f}**: {wins}-{draws}-{losses}",
             "analysis": critique,
         }
@@ -83,17 +88,19 @@ def analyze_players(tournament_state, skip_critique):
     analysis = dict(sorted(analysis.items(), key=lambda x: x[1]["score"], reverse=True))
 
     # collect scores
-    scores = [tournament_state['leaderboard'][player_name]['score'] for player_name in tournament_state["players"]]
+    scores = [
+        tournament_state["leaderboard"][player_name]["score"]
+        for player_name in tournament_state["players"]
+    ]
     median = np.median(scores)
     average = np.mean(scores)
     stddev = np.std(scores)
 
     # dump as markdown
-    dump = f"\n# {tournament_state['meta']['competition'].capitalize()} competition\n"
-    dump += f"## {tournament_state['meta']['tournament'].capitalize()} tournament\n"
-    dump += f"Player set {tournament_state['meta']['player_set'].upper()} with {len(tournament_state['players'])} players, {len(tournament_state['challenges'])} challenges, "
+    dump = f"\n## {tournament_state['meta']['competition'].capitalize()} / {tournament_state['meta']['tournament'].capitalize()} / {tournament_state['meta']['player_set']}\n"
+    dump += f"{len(tournament_state['players'])} players, {len(tournament_state['challenges'])} challenges, "
     dump += f"{len(tournament_state['matches'])} out of {tournament_state['meta']['pairings']} matches played\n"
-    dump +=  f"\nMedian {median:.2f}; average {average:.2f} +/- {stddev:.2f} stddev\n"
+    dump += f"\nMedian {median:.2f}; average {average:.2f} +/- {stddev:.2f} stddev\n"
     dump += "\n| Player | Score | Score Dev | ELO | Analysis |\n|---|---|---|---|\n"
     for player_name, player_analysis in analysis.items():
         dump += f"**{player_name}**|{player_analysis['score_stat']}|{(player_analysis['score'] - average)/stddev:.1f}|{player_analysis['elo']}|{player_analysis['analysis']}|\n"
@@ -233,3 +240,48 @@ def plot_score_matrix(tournament_state, games_output_file, scores_output_file):
 
     _plot_matrix(matches, labels, "{value:.0f}", games_output_file)
     _plot_matrix(matrix, labels, "{value:.2f}", scores_output_file)
+
+
+def analyze(competition, tournament, players, skip_critique):
+    """Analyze player performance."""
+
+    for tournament in resolve_tournaments(competition, tournament):
+        print(f"Playing matches for tournament {tournament.upper()}...")
+
+        tournament_state = load_tournament(competition, tournament, players)
+        player_set = tournament_state["meta"]["player_set"]
+
+        print(f"\nAnalyzing {len(tournament_state['players'])} players")
+        dump, _analysis = analyze_players(tournament_state, skip_critique)
+
+        path = (
+            f"competitions/{competition}/tournaments/{tournament}/analysis/{player_set}"
+        )
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        with open(f"{path}/analysis-{player_set}.md", "w") as f:
+            f.write(
+                dump
+                + "\n\n### ELO History\n![ELO History](./elo-history.png)"
+                + "\n\n### Score History\n![Score History](./score-history.png)"
+                + "\n\n### Score Matrix\n![Score Matrix](./score-matrix.png)"
+                + "\n\n### Game Matrix\n![Game Matrix](./game-matrix.png)"
+            )
+
+        # plot histories
+        plot_elo_history(
+            tournament_state,
+            f"{path}/elo-history.png",
+        )
+        plot_score_history(
+            tournament_state,
+            f"{path}/score-history.png",
+        )
+
+        # plot score matrix
+        plot_score_matrix(
+            tournament_state,
+            f"{path}/game-matrix.png",
+            f"{path}/score-matrix.png",
+        )
