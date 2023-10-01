@@ -178,7 +178,8 @@ def load_tournament(competition, tournament, player_set=""):
 
         if performance_time < max(player_time, challenge_time):
             print(f"      discarding outdated performance {performance_name}")
-            os.remove(performance_filename)
+            if False:
+                os.remove(performance_filename)
 
     # generate the leaderboard
     generate_leaderboard(tournament_state)

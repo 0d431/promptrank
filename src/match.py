@@ -24,7 +24,7 @@ def _get_performance_id(challenge_name, player_name):
 
 
 ##############################################
-def _find_match(tournament_state, min_matches_to_play):
+def _find_match(tournament_state, min_matches_to_play, player_name=None):
     """Find the next match to play"""
 
     def _randomize(it):
@@ -48,6 +48,14 @@ def _find_match(tournament_state, min_matches_to_play):
     # make sure to ignore diagonal
     for i in range(len(labels)):
         matches[i, i] = 100000
+
+    # if a player is given, make sure to ignore other pairings
+    if player_name is not None:
+        for i, player_A_name in enumerate(labels):
+            for i, player_B_name in enumerate(labels):
+                if player_A_name != player_name and player_B_name != player_name:
+                    matches[i, j] = 100000
+                    matches[j, i] = 100000
 
     # find the pair of players with the least matches
     min_matches = np.min(matches)
@@ -147,12 +155,12 @@ def _perform(tournament_state, challenge_name, player):
 
 
 ##############################################
-def run_match(tournament_state, min_matches):
+def run_match(tournament_state, min_matches, player_name=None):
     """Run a match between two players"""
 
     # find next match
     challenge_name, player_A_name, player_B_name, min_played = _find_match(
-        tournament_state, min_matches
+        tournament_state, min_matches, player_name
     )
 
     if challenge_name is not None:
@@ -209,21 +217,28 @@ def run_match(tournament_state, min_matches):
 
 
 ##############################################
-def play(competition, tournament, player_set, number_matches):
+def play(competition, tournament_name, player_set, number_matches, player_name=None):
     """Play a number of matches."""
 
-    for tournament in resolve_tournaments(competition, tournament):
+    objective = f"against {player_name}" if player_name else "for all player pairs"
+
+    tournaments = {}
+    for tournament_name in resolve_tournaments(competition, tournament_name):
         print(
-            f"Playing {number_matches} matches for each pair in player set {player_set.upper()} for tournament {tournament.upper()}..."
+            f"Playing {number_matches} matches {objective} in player set {player_set.upper()} for tournament {tournament_name.upper()}..."
         )
 
-        tournament_state = load_tournament(competition, tournament, player_set)
+        tournament = load_tournament(competition, tournament_name, player_set)
         while True:
-            min_played = run_match(tournament_state, number_matches)
+            min_played = run_match(tournament, number_matches, player_name)
 
             if min_played == number_matches:
                 break
 
             print(
-                f"  {tournament.upper()} match {len(tournament_state['matches']) + 1}/{tournament_state['meta']['pairings']} - {min_played:.0f} matches played by all pairs"
+                f"  {tournament_name.upper()} - {min_played:.0f} matches played {objective}"
             )
+
+        tournaments[tournament_name] = tournament
+
+    return tournaments

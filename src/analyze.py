@@ -1,4 +1,5 @@
 import os
+import re
 import random
 import warnings
 import seaborn as sns
@@ -8,14 +9,32 @@ import numpy as np
 from llm import complete
 from tournament import load_tournament, resolve_tournaments
 
-warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 ##############################################
 ASSESSMENT_PROMPT = """The player {player} is participating in a tournament with the aim to {objective}. The player has received the following assessments of their performance against opponents in their matches:
 
 {assessments}
 
-Silently analyze the performance of the player {player} across all these assessments. Then write one sentence to chacterise the overall profile of the player. Then add a bullet list with up to three, very detailed weaknesses of the player:"""
+Silently analyze the performance of the player {player} across all these assessments. 
+
+Then, firstly, give a detailed and highly specific assessment of the strengths of the player in a bullet list. 
+
+Then, secondly, giuve a detailed and highly specific assessment of the weaknesses of the player in a bullet list.
+
+Provide your response in like this:
+
+STRENGTHS:
+- ...
+- ...
+- ...
+
+WEAKNESSES:
+- ...
+- ...
+- ...
+
+Now, it is time to provide your response."""
 
 
 def analyze_player(tournament_state, player_name):
@@ -106,6 +125,18 @@ def analyze_players(tournament_state, skip_critique):
         dump += f"**{player_name}**|{player_analysis['score_stat']}|{(player_analysis['score'] - average)/stddev:.1f}|{player_analysis['elo']}|{player_analysis['analysis']}|\n"
 
     return dump, analysis
+
+
+def parse_analysis(analysis):
+    """Extract the strengths and weaknesses from the analysis."""
+
+    r = re.findall(r"STRENGTHS:\n(.*?)(?:\n\s*\n|$)", analysis, re.DOTALL)
+    strengths = r[0] if r.count() > 0 else "n/a"
+
+    r = re.findall(r"WEAKNESSES:\n(.*?)(?:\n\s*\n|$)", analysis, re.DOTALL)
+    weaknesses = r[0] if r.count() > 0 else "n/a"
+
+    return strengths, weaknesses
 
 
 def _plot_history(

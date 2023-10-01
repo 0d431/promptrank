@@ -4,7 +4,7 @@ dotenv.load_dotenv()
 
 import argparse
 from analyze import analyze
-from fusion import fuse_players
+from evolve.evolve import evolve_season
 from match import play
 
 
@@ -49,12 +49,17 @@ def _build_parser():
         help="If set, skips analysis of strengths and weaknesses.",
     )
 
-    # 'fuse' command parser
-    fuse_parser = subparsers.add_parser(
-        "fuse", help="Fuse the best players from all tournaments."
+    # 'evolve' command parser
+    evolve_parser = subparsers.add_parser(
+        "evolve",
+        help="Play mutiple seasons to evolve the best players from all tournaments.",
     )
-    fuse_parser.add_argument(
-        "-n", "--number", type=int, default=1, help="Number of variations to create."
+    evolve_parser.add_argument(
+        "-r",
+        "--reference_player",
+        type=str,
+        nargs=1,
+        help="Name of the referenec player for initial auditions.",
     )
 
     return parser
@@ -70,8 +75,8 @@ def main():
         play(args.competition, args.tournament, args.players, args.number)
     elif args.command == "analyze":
         analyze(args.competition, args.tournament, args.players, args.skip_critique)
-    elif args.command == "fuse":
-        fuse_players(args.competition, args.players, args.number)
+    elif args.command == "evolve":
+        evolve_season(args.competition, args.players, args.reference_player)
     else:
         print("Invalid command. Use -h for help.")
 
