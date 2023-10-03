@@ -2,8 +2,10 @@ import dotenv
 
 dotenv.load_dotenv()
 
+import logging
 import argparse
-from analyze import analyze
+import datetime
+from analyze import analyze_competition
 from evolve.evolve import evolve_season
 from match import play
 
@@ -12,7 +14,13 @@ def _build_parser():
     """Build the command-line parser."""
 
     parser = argparse.ArgumentParser(description="Promptrank Command-Line Interface")
-    parser.add_argument("competition", type=str, help="Name of the competition.")
+    parser.add_argument(
+        "-c",
+        "--competition",
+        type=str,
+        help="Name of the competition",
+        required=True,
+    )
     parser.add_argument(
         "-t",
         "--tournament",
@@ -43,10 +51,10 @@ def _build_parser():
         "analyze", help="Analyze player performance."
     )
     analyze_parser.add_argument(
-        "-s",
-        "--skip_critique",
+        "-q",
+        "--critique",
         action="store_true",
-        help="If set, skips analysis of strengths and weaknesses.",
+        help="If set, generate critique of players' strengths and weaknesses.",
     )
 
     # 'evolve' command parser
@@ -58,7 +66,6 @@ def _build_parser():
         "-r",
         "--reference_player",
         type=str,
-        nargs=1,
         help="Name of the referenec player for initial auditions.",
     )
 
@@ -74,7 +81,9 @@ def main():
     if args.command == "play":
         play(args.competition, args.tournament, args.players, args.number)
     elif args.command == "analyze":
-        analyze(args.competition, args.tournament, args.players, args.skip_critique)
+        analyze_competition(
+            args.competition, args.tournament, args.players, args.critique
+        )
     elif args.command == "evolve":
         evolve_season(args.competition, args.players, args.reference_player)
     else:
@@ -82,4 +91,14 @@ def main():
 
 
 if __name__ == "__main__":
+    log_filename = (
+        f"log/promptrank_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    )
+    logging.basicConfig(
+        filename=log_filename,
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s\n%(message)s\n======\n",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
     main()

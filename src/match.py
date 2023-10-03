@@ -4,27 +4,53 @@ import json
 import random
 import datetime
 import numpy as np
+import concurrent.futures
 from llm import complete
 from leaderboard import update_leaderboard
 from tournament import load_tournament, resolve_tournaments
 
 
 ##############################################
+def run_in_parallel(fun, args, max_workers=5):
+    """Execute a function in parallel on a set of args"""
+    results = []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_arg = {executor.submit(fun, *arg): arg for arg in args}
+        for future in concurrent.futures.as_completed(future_to_arg):
+            results.append(future.result())
+
+    return results
+
+
+##############################################
+def _escape_player_name(player_name):
+    """Escape a player name for use in a filename"""
+    return player_name.replace("/", "=")
+
+
+##############################################
 def _get_match_id(challenge_name, player_A_name, player_B_name):
     """Generate a unique ID for a match"""
 
-    return challenge_name + ":" + player_A_name + "<>" + player_B_name
+    return (
+        challenge_name
+        + ":"
+        + _escape_player_name(player_A_name)
+        + "<>"
+        + _escape_player_name(player_B_name)
+    )
 
 
 ##############################################
 def _get_performance_id(challenge_name, player_name):
     """Generate a unique ID for a performance"""
 
-    return challenge_name + ":" + player_name
+    return challenge_name + ":" + _escape_player_name(player_name)
 
 
 ##############################################
-def _find_match(tournament_state, min_matches_to_play, player_name=None):
+def _find_match(tournament_state, min_matches_to_play, player_name=None, scheduled_matches=[]):
     """Find the next match to play"""
 
     def _randomize(it):
@@ -45,6 +71,14 @@ def _find_match(tournament_state, min_matches_to_play, player_name=None):
         matches[player_A_ix, player_B_ix] += 1
         matches[player_B_ix, player_A_ix] += 1
 
+    # add scheduled matches
+    for match in scheduled_matches:
+        player_A_ix = labels.index(match[2])
+        player_B_ix = labels.index(match[3])
+
+        matches[player_A_ix, player_B_ix] += 1
+        matches[player_B_ix, player_A_ix] += 1
+
     # make sure to ignore diagonal
     for i in range(len(labels)):
         matches[i, i] = 100000
@@ -52,13 +86,13 @@ def _find_match(tournament_state, min_matches_to_play, player_name=None):
     # if a player is given, make sure to ignore other pairings
     if player_name is not None:
         for i, player_A_name in enumerate(labels):
-            for i, player_B_name in enumerate(labels):
+            for j, player_B_name in enumerate(labels):
                 if player_A_name != player_name and player_B_name != player_name:
                     matches[i, j] = 100000
                     matches[j, i] = 100000
 
     # find the pair of players with the least matches
-    min_matches = np.min(matches)
+    min_matches = int(np.min(matches))
     if min_matches >= min_matches_to_play:
         return None, None, None, min_matches
 
@@ -83,22 +117,21 @@ def _find_match(tournament_state, min_matches_to_play, player_name=None):
 
 
 ##############################################
-def _evaluate(
-    tournament_state, challenge, player_A_name, output_A, player_B_name, output_B
-):
+def _evaluate(tournament, challenge, player_A_name, output_A, player_B_name, output_B):
     """Perform the evaluation of a match"""
 
+    # print(f"      {tournament['meta']['tournament'].upper()} - evaluating {player_A_name} vs {player_B_name} on {challenge['name']}")
     evaluation = complete(
-        tournament_state["evaluation"]["model"],
-        tournament_state["evaluation"]["temperature"],
-        prompt=tournament_state["evaluation"]["prompt"].format(
+        tournament["evaluation"]["model"],
+        tournament["evaluation"]["temperature"],
+        prompt=tournament["evaluation"]["prompt"].format(
             **challenge,
-            objective=tournament_state["evaluation"]["objective"],
-            criteria=tournament_state["evaluation"]["criteria"],
+            objective=tournament["evaluation"]["objective"],
+            criteria=tournament["evaluation"]["criteria"],
             output_A=output_A,
             output_B=output_B,
         ),
-        system=tournament_state["evaluation"].get("system", ""),
+        system=tournament["evaluation"].get("system", ""),
     )
 
     match = re.search(r"(?<=Assessment: ).*?(?=\n)", evaluation)
@@ -124,14 +157,14 @@ def _evaluate(
 
 
 ##############################################
-def _perform(tournament_state, challenge_name, player):
+def _perform(tournament, challenge_name, player):
     """Perform a performance for a player"""
 
-    performance_file = f"competitions/{tournament_state['meta']['competition']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
+    performance_file = f"competitions/{tournament['meta']['competition']['name']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
     if not os.path.exists(performance_file):
         # create the performance
-        print(f"      {player['name']} performs {challenge_name}")
-        challenge = tournament_state["challenges"][challenge_name]
+        # print(f"      {player['name']} performs {challenge_name}")
+        challenge = tournament["challenges"][challenge_name]
         challenge["date"] = f"{datetime.datetime.now():%Y-%m-%d}"
         performance = {
             "player": player["name"],
@@ -155,65 +188,82 @@ def _perform(tournament_state, challenge_name, player):
 
 
 ##############################################
-def run_match(tournament_state, min_matches, player_name=None):
-    """Run a match between two players"""
+def _play_match(tournament, challenge_name, player_A_name, player_B_name):
+    """Play a match between two players"""
 
-    # find next match
-    challenge_name, player_A_name, player_B_name, min_played = _find_match(
-        tournament_state, min_matches, player_name
+    id = _get_match_id(challenge_name, player_A_name, player_B_name)
+    challenge = tournament["challenges"][challenge_name]
+    player_A = tournament["players"][player_A_name]
+    player_B = tournament["players"][player_B_name]
+
+    # perform performances if needed
+    performances = {}
+    for player in (player_A, player_B):
+        performances[player["name"]] = _perform(tournament, challenge_name, player)
+
+    # perform the evaluation
+    player_A_output = performances[player_A_name]["output"]
+    player_B_output = performances[player_B_name]["output"]
+
+    assessment, winner_name = _evaluate(
+        tournament,
+        challenge,
+        player_A_name,
+        player_A_output,
+        player_B_name,
+        player_B_output,
     )
 
-    if challenge_name is not None:
-        # play the next match
-        id = _get_match_id(challenge_name, player_A_name, player_B_name)
-        print(f"    {player_A_name} vs {player_B_name} on challenge {challenge_name}")
+    # create the match record
+    match = {
+        "id": id,
+        "player_A": {"name": player_A_name},
+        "player_B": {"name": player_B_name},
+        "challenge": challenge["name"],
+        "result": {"winner": winner_name, "assessment": assessment},
+    }
 
-        challenge = tournament_state["challenges"][challenge_name]
-        player_A = tournament_state["players"][player_A_name]
-        player_B = tournament_state["players"][player_B_name]
+    # store the match
+    with open(
+        f"competitions/{tournament['meta']['competition']['name']}/tournaments/{tournament['meta']['tournament']}/matches/{id}.json",
+        "w",
+    ) as file:
+        json.dump(match, file, indent=2)
 
-        # perform performances if needed
-        performances = {}
-        for player in (player_A, player_B):
-            performances[player["name"]] = _perform(
-                tournament_state, challenge_name, player
-            )
+    return match
 
-        # perform the evaluation
-        player_A_output = performances[player_A_name]["output"]
-        player_B_output = performances[player_B_name]["output"]
 
-        assessment, winner_name = _evaluate(
-            tournament_state,
-            challenge,
-            player_A_name,
-            player_A_output,
-            player_B_name,
-            player_B_output,
+##############################################
+def play_next_matches(
+    tournament, min_matches_all_players, player_name=None, max_matches_to_play=1
+):
+    """Run a match between two players"""
+
+    # find next matches
+    next_matches = []
+    while len(next_matches) < max_matches_to_play:
+        challenge_name, player_A_name, player_B_name, next_min_matches = _find_match(
+            tournament, min_matches_all_players, player_name, next_matches
         )
 
-        # create the match record
-        match = {
-            "player_A": {"name": player_A_name},
-            "player_B": {"name": player_B_name},
-            "challenge": challenge["name"],
-            "result": {"winner": winner_name, "assessment": assessment},
-        }
-        tournament_state["matches"][id] = match
+        if challenge_name is None:
+            break
 
-        # store the match
-        with open(
-            f"competitions/{tournament_state['meta']['competition']}/tournaments/{tournament_state['meta']['tournament']}/matches/{id}.json",
-            "w",
-        ) as file:
-            json.dump(match, file, indent=2)
+        next_matches.append((tournament, challenge_name, player_A_name, player_B_name))
 
-        # update leaderboard
-        update_leaderboard(tournament_state, match)
-    else:
-        print(f"    all pairs have played at least {min_played:.0f} matches")
+        if next_min_matches >= min_matches_all_players:
+            break
 
-    return min_played
+    # play the matches
+    matches = run_in_parallel(_play_match, next_matches, 5)
+
+    # update leaderboard
+    for match in matches:
+        tournament["matches"][match["id"]] = match
+        update_leaderboard(tournament, match)
+
+    # return the new minimum number of matches played
+    return next_min_matches
 
 
 ##############################################
@@ -229,16 +279,16 @@ def play(competition, tournament_name, player_set, number_matches, player_name=N
         )
 
         tournament = load_tournament(competition, tournament_name, player_set)
-        while True:
-            min_played = run_match(tournament, number_matches, player_name)
-
-            if min_played == number_matches:
-                break
-
-            print(
-                f"  {tournament_name.upper()} - {min_played:.0f} matches played {objective}"
-            )
-
         tournaments[tournament_name] = tournament
+
+        while True:
+            min_matches_all_players = play_next_matches(
+                tournament, number_matches, player_name, 5
+            )
+            print(
+                f"    {tournament_name.upper()} - {len(tournament['matches'])} matches played; {min_matches_all_players:.0f}/{number_matches} {objective}"
+            )
+            if min_matches_all_players >= number_matches:
+                break
 
     return tournaments

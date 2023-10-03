@@ -14,3 +14,7 @@ def generate_random_id(length=3):
 def LS(s):
     """Helper function for YAML writing"""
     return LiteralScalarString(textwrap.dedent(s))
+
+
+#################################################
+EVOLUTION_MODEL = "gpt-4"

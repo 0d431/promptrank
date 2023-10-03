@@ -1,13 +1,12 @@
 import re
-import glob
+import os
 from ruamel.yaml import YAML
-from src.tournament import load_tournament
 from src.llm import complete
-from src.analyze import analyze_player
-from .helper import LS
+from src.analyze import get_player_critique
+from .helper import LS, EVOLUTION_MODEL, generate_random_id
 
 ##############################################
-PLAYER_CRITIQUES = """Tournament {tournament}:
+PLAYER_CRITIQUES = """Tournament "{tournament}":
 
 The objective of this tournament was to {objective} with the following evaluation criteria:
 {criteria}
@@ -28,6 +27,7 @@ The tool {player_name} has used the following instructions in the competition:
 ===END INSTRUCTION===
 
 These are the evaluations for the tool {player_name}:
+
 {critique_summary}
 
 Your task is to optimize the instructions for the tool {player_name} to improve its performance in the competition.
@@ -43,30 +43,26 @@ Now, it is time to write the best possible instructions based on the learnings f
 
 
 ##############################################
-def enhance_player(competition, player_set, player_name, run_id, variations=1):
+def enhance_player(tournaments, player_name, player_prefix, variations=1):
     """Take the given player and try to improve its shortcomings along all tournament dimensions."""
 
     player = None
     critiques = []
 
     # scan all tournaments
-    for tournament in glob.glob(f"competitions/{competition}/tournaments/*"):
-        # load tournament
-        tournament_state = load_tournament(
-            competition, tournament.split("/")[-1], player_set
-        )
-
+    for tournament in tournaments.values():
         # get the player
         if player is None:
-            player = tournament_state["players"][player_name]
+            player = tournament["players"][player_name]
 
         # get the analysis of the player
         critiques.append(
             {
-                "tournament": tournament_state["meta"]["name"],
-                "critique": analyze_player(tournament_state, player_name),
-                "objective": tournament_state["evaluation"]["objective"],
-                "criteria": tournament_state["evaluation"]["criteria"],
+                "competition": tournament["meta"]["competition"]["name"],
+                "tournament": tournament["meta"]["tournament"],
+                "critique": get_player_critique(tournament, player_name),
+                "objective": tournament["evaluation"]["objective"],
+                "criteria": tournament["evaluation"]["criteria"],
                 "player_name": player_name,
             }
         )
@@ -85,11 +81,11 @@ def enhance_player(competition, player_set, player_name, run_id, variations=1):
     enhanced_players = []
     for ix in range(variations):
         # player name
-        enhanced_player = f"{player['model']}-t{player['temperature']*10:02.0f}-enhanced-{run_id}-{ix+1:02.0f}"
+        enhanced_player = f"{player_prefix}enhanced-{player['model']}-t{player['temperature']*10:02.0f}-{generate_random_id()}"
         enhanced_players.append(enhanced_player)
 
         print(f"Generating {enhanced_player} - variation {ix+1} of {variations}...")
-        enhanced_completion = complete("gpt-4", 1.0, prompt)
+        enhanced_completion = complete(EVOLUTION_MODEL, 1.0, prompt)
 
         # clean
         enhanced_completion = re.sub(r"===[A-Z\s]+===", "", enhanced_completion)
@@ -97,16 +93,16 @@ def enhance_player(competition, player_set, player_name, run_id, variations=1):
 
         # save fused prompt
         yaml = YAML()
-        with open(
-            f"competitions/{competition}/players/{enhanced_player}.yaml",
-            "w",
-        ) as f:
+        player_filename = f"competitions/{critiques[0]['competition']}/players/{enhanced_player}.yaml"
+        os.makedirs(os.path.dirname(player_filename), exist_ok=True)
+        with open(player_filename, "w") as f:
             yaml.dump(
                 {
                     "name": enhanced_player,
                     "model": player["model"],
                     "temperature": player["temperature"],
                     "ancestor": player_name,
+                    "critique": LS(critique_summary),
                     "prompt": LS(enhanced_completion),
                 },
                 f,

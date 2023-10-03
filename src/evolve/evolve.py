@@ -1,7 +1,7 @@
+import os
+import math
 import random
 from match import play
-from analyze import analyze_players
-from .helper import generate_random_id
 from .invent import invent_player
 from .enhance import enhance_player
 from .merge import merge_players
@@ -11,7 +11,7 @@ from .merge import merge_players
 FULL_SEASON_MATCHES = 12
 
 # The number of initial matches during initial audition against the refernce player
-INITIAL_AUDITION_MATCHES = 10
+INITIAL_AUDITION_MATCHES = 12
 
 # Winners per season
 WINNERS_PER_SEASON = 4
@@ -20,7 +20,7 @@ WINNERS_PER_SEASON = 4
 CHALLENGERS_PER_SEASON = 10
 
 # Surviving challengers per season
-SURVIVING_CHALLENGERS_PER_SEASON = 4
+SURVIVING_CHALLENGERS_PER_SEASON = 5
 
 # The model for new inventions
 INVENTION_MODEL = "gpt-3.5-turbo"
@@ -31,124 +31,121 @@ INVENTION_TEMPERATURE = 0.0
 
 ##############################################
 def _collect_winners(tournaments, reference_player, number_of_winners):
-    """Collect the best players from each tournament, plus the best balanced players to reach N winners"""
+    """Collect the best players from each tournament, plus the best balanced players to reach desired number of winners"""
 
-    season_results = {}
+    player_set = next(iter(tournaments.values()))["meta"]["player_set"]
     print(
-        f"Determining {number_of_winners} winners across {len(tournaments)} tournaments..."
+        f"Determining {number_of_winners} winners from player set {player_set.upper()} across {len(tournaments)} tournaments..."
     )
 
-    # scan all tournaments
-    for tournament in tournaments:
-        # get overall analysis of the tournament
-        _, analysis = analyze_players(tournament, skip_critique=True)
-
-        # discard the reference player
-        analysis.pop(reference_player)
-
-        season_results[tournament["meta"]["name"]] = analysis
-
-    # fetch the best players from each tournament
+    # scan all tournaments, fetch best players and tally balanced scores across tournaments
     winners = set()
-    for tournament, analysis in season_results.items():
-        # get the best players
-        winners.add(analysis.keys()[0])
-        print(
-            f"   {analysis.keys()[0]} won tournament {tournament} with score {analysis.values()[0]['score']:.2f}"
-        )
-
-    # calculate balanced score as the harmonic mean of the score per tournament
     balanced_scores = {}
-    for _tournament, analysis in season_results.items():
-        for player, analysis in analysis.items():
-            if player not in balanced_scores:
-                balanced_scores[player] = 0.0
+    for tournament in tournaments.values():
+        # collect player -> score map
+        scores = {
+            p: tournament["leaderboard"][p]["score"]
+            for p in tournament["players"]
+            if p != reference_player
+        }
 
-            balanced_scores[player] += 1.0 / analysis["score"]
-
-    balanced_scores = {player: 1.0 / score for player, score in balanced_scores.items()}
-
-    # sort by balanced score
-    balanced_scores = {
-        player: score
-        for player, score in sorted(
-            balanced_scores.items(), key=lambda item: item[1], reverse=True
+        # get the best player
+        winner = max(scores, key=scores.get)
+        winners.add(winner)
+        print(
+            f"   {winner} won tournament {tournament['meta']['tournament']} with score {scores[winner]:.2f}"
         )
+
+        # calculate balanced score as the harmonic mean of the score per tournament
+        for player, score in scores.items():
+            if player not in balanced_scores:
+                balanced_scores[player] = 1.0
+
+            balanced_scores[player] *= score
+
+    # complete
+    balanced_scores = {
+        player: math.pow(score, 1.0 / len(tournaments))
+        for player, score in balanced_scores.items()
     }
 
     # fetch the best balanced players to reach N winners
     while len(winners) < number_of_winners and len(balanced_scores) > 0:
-        winners.add(balanced_scores.keys()[0])
-        print(
-            f"   {balanced_scores.keys()[0]} with top balanced score {balanced_scores.values()[0]:.2f}"
-        )
-        balanced_scores.pop(balanced_scores.keys()[0])
+        winner = max(balanced_scores, key=balanced_scores.get)
+        if winner not in winners:
+            winner_score = balanced_scores[winner]
+
+            # only consider players that are above 50% balanced score
+            if winner_score > 0.5:
+                winners.add(winner)
+                print(f"   {winner} achieved top balanced score {winner_score:.2f}")
+
+        del balanced_scores[winner]
 
     return list(winners)[:number_of_winners]
 
 
 ##############################################
 def _create_challengers(
-    competition,
-    player_set,
+    tournaments,
+    season,
     previous_season_winners,
     reference_player,
     challenger_player_set,
 ):
     """Create new challenger players based on the winners."""
 
-    # create a season id for players
-    season_id = generate_random_id()
-
     # first, 20% new players through invention
-    number_of_inventions = int(0.2 * len(previous_season_winners))
+    number_of_inventions = int(0.2 * CHALLENGERS_PER_SEASON)
     invented_players = invent_player(
-        competition,
+        tournaments,
         INVENTION_MODEL,
         INVENTION_TEMPERATURE,
-        season_id,
+        season,
         number_of_inventions,
     )
 
     # now, 40% through enhancement
-    number_of_enhancements = int(0.4 * len(previous_season_winners))
+    number_of_enhancements = int(0.4 * CHALLENGERS_PER_SEASON)
     enhanced_players = []
     for _ in range(number_of_enhancements):
-        enhanced_players.append(
+        enhanced_players.extend(
             enhance_player(
-                competition,
-                player_set,
+                tournaments,
                 random.choice(previous_season_winners),
-                season_id,
+                season,
             )
         )
 
     # finally, generate the rest through merging
     number_of_merges = (
-        len(previous_season_winners) - number_of_inventions - number_of_enhancements
+        CHALLENGERS_PER_SEASON - number_of_inventions - number_of_enhancements
     )
     merged_players = []
     for _ in range(number_of_merges):
-        merged_players.append(
+        merged_players.extend(
             merge_players(
-                competition,
-                player_set,
+                tournaments,
                 random.choice(previous_season_winners),
                 random.choice(previous_season_winners),
-                season_id,
+                season,
             )
         )
 
     # now, create the challenger player set
-    with open(
-        f"competitions/{competition}/players/{challenger_player_set}.players", "w"
-    ) as f:
+    playerset_filename = f"competitions/{next(iter(tournaments.values()))['meta']['competition']['name']}/player_sets/{challenger_player_set}.players"
+    os.makedirs(os.path.dirname(playerset_filename), exist_ok=True)
+
+    with open(playerset_filename, "w") as f:
         f.write(
             "\n".join(
-                invented_players
-                + enhanced_players
-                + merged_players
-                + [reference_player]
+                [
+                    f"{p}.yaml"
+                    for p in invented_players
+                    + enhanced_players
+                    + merged_players
+                    + [reference_player]
+                ]
             )
         )
 
@@ -165,40 +162,64 @@ def _cull_challengers(
     )
 
     # now, create the full season player set
-    with open(
-        f"competitions/{auditions.values()[0]['meta']['competition_name']}/players/{full_season_player_set}.players",
-        "w",
-    ) as f:
+    playerset_filename = f"competitions/{next(iter(auditions.values()))['meta']['competition']['name']}/player_sets/{full_season_player_set}.players"
+    os.makedirs(os.path.dirname(playerset_filename), exist_ok=True)
+
+    with open(playerset_filename, "w") as f:
         f.write(
-            "\n".join(audition_winners + previous_season_winners + [reference_player])
+            "\n".join(
+                [
+                    f"{p}.yaml"
+                    for p in audition_winners
+                    + previous_season_winners
+                    + [reference_player]
+                ]
+            )
         )
 
 
 ##############################################
 def evolve_season(competition, player_set, reference_player):
-    # determine the base player set name and the current season
-    parts = player_set.rsplit("-S", 1)
-    if len(parts) == 1:
-        base_player_set = player_set
-        season = 0
-    else:
-        base_player_set = parts[0]
-        season = int(parts[1])
+    """Evolve player set based on the last season's winners."""
+
+    # find the latest season
+    matching_sets = [
+        ps
+        for ps in os.listdir(f"competitions/{competition}/player_sets/")
+        if ps.startswith(f"{player_set}-S")
+        and ps.endswith(".players")
+        and not ps.endswith("-challengers.players")
+    ]
+
+    season = 0
+    if matching_sets:
+        season = max(int(file.split("-S")[1][:2]) for file in matching_sets)
+        print(f"Found latest season {season:02d}")
+
+    this_season_player_set = f"{player_set}-S{season:02d}" if season > 0 else player_set
+    new_season_player_set = f"{player_set}-S{season+1:02d}"
 
     # make sure all tournaments are fully played
-    tournaments = play(competition, "", player_set, FULL_SEASON_MATCHES)
+    tournaments = play(competition, "", this_season_player_set, FULL_SEASON_MATCHES)
 
     # collect the winners of the season
     season_winners = _collect_winners(tournaments, reference_player, WINNERS_PER_SEASON)
 
-    # get the new season's id
-    new_season_player_set = f"{base_player_set}-S{season+1:02d}"
-
-    # create new players through merging, invention, and enhancement, returning the challenger player set name
+    # finish season and create challengers, unless that has been done already
     challenger_player_set = f"{new_season_player_set}-challengers"
-    _create_challengers(
-        tournaments, player_set, season_winners, reference_player, challenger_player_set
-    )
+    if not os.path.exists(
+        f"competitions/{competition}/player_sets/{challenger_player_set}.players"
+    ):
+        # create new players through merging, invention, and enhancement
+        _create_challengers(
+            tournaments,
+            new_season_player_set + "/",
+            season_winners,
+            reference_player,
+            challenger_player_set,
+        )
+    else:
+        print(f"Continuing audition for player set {challenger_player_set}...")
 
     # play the initial audition
     auditions = play(
@@ -211,7 +232,7 @@ def evolve_season(competition, player_set, reference_player):
 
     # now cull underperformes from audition and create the full season player set
     _cull_challengers(
-        auditions, reference_player, season_winners, new_season_player_set
+        auditions, season_winners, reference_player, new_season_player_set
     )
 
     print(f"Prepared evolved next season on player set {new_season_player_set}.")

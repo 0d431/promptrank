@@ -1,14 +1,13 @@
 import re
-import glob
+import os
 from ruamel.yaml import YAML
-from src.analyze import analyze_player
-from src.tournament import load_tournament
+from src.analyze import get_player_critique
 from src.llm import complete
-from .helper import LS
+from .helper import LS, EVOLUTION_MODEL, generate_random_id
 
 
 ##############################################
-PLAYER_CRITIQUES = """Tournament {tournament}:
+PLAYER_CRITIQUES = """Tournament "{tournament}":
 
 The objective of this tournament was to {objective} with the following evaluation criteria:
 {criteria}
@@ -38,6 +37,7 @@ This are the instruction that player {player_B} used:
 ===END INSTRUCTION===
 
 This is a critique of their performance across all tournaments:
+
 {critique_summary}
 
 Your task is now to fuse the instructions of players {player_A} and {player_B} into a single AI tool instruction that combines the strengths of the the players and overcomes their weaknesses.
@@ -51,35 +51,29 @@ Now, it is time to write the best possible instructions based on the learnings f
 
 
 ##############################################
-def merge_players(
-    competition, player_set, player_A_name, player_B_name, run_id, variations=1
-):
+def merge_players(tournaments, player_A_name, player_B_name, player_prefix, variations=1):
     # collect player's critiques
 
     player_A = player_B = None
     critiques = []
 
     # scan all tournaments
-    for tournament in glob.glob(f"competitions/{competition}/tournaments/*"):
-        # load tournament
-        tournament_state = load_tournament(
-            competition, tournament.split("/")[-1], player_set
-        )
-
+    for tournament in tournaments.values():
         # get the player
         if player_A is None:
-            player_A = tournament_state["players"][player_A_name]
+            player_A = tournament["players"][player_A_name]
         if player_B is None:
-            player_B = tournament_state["players"][player_B_name]
+            player_B = tournament["players"][player_B_name]
 
         # get the analysis of the players
         critiques.append(
             {
-                "tournament": tournament_state["meta"]["name"],
-                "critique_A": analyze_player(tournament_state, player_A_name),
-                "critique_B": analyze_player(tournament_state, player_B_name),
-                "objective": tournament_state["evaluation"]["objective"],
-                "criteria": tournament_state["evaluation"]["criteria"],
+                "competition": tournament["meta"]["competition"]["name"],
+                "tournament": tournament["meta"]["tournament"],
+                "critique_A": get_player_critique(tournament, player_A_name),
+                "critique_B": get_player_critique(tournament, player_B_name),
+                "objective": tournament["evaluation"]["objective"],
+                "criteria": tournament["evaluation"]["criteria"],
                 "player_A": player_A_name,
                 "player_B": player_B_name,
             }
@@ -101,11 +95,11 @@ def merge_players(
     merged_players = []
     for ix in range(variations):
         # player name
-        merged_player = f"{player_A['model']}-t{player_A['temperature']*10:02.0f}-merged-{run_id}-{ix+1:02.0f}"
+        merged_player = f"{player_prefix}merged-{player_A['model']}-t{player_A['temperature']*10:02.0f}-{generate_random_id()}"
         merged_players.append(merged_player)
 
         print(f"Generating {merged_player} - variation {ix+1} of {variations}...")
-        merged_completion = complete("gpt-4", 1.0, prompt)
+        merged_completion = complete(EVOLUTION_MODEL, 1.0, prompt)
 
         # clean
         merged_completion = re.sub(r"===[A-Z\s]+===", "", merged_completion)
@@ -113,10 +107,9 @@ def merge_players(
 
         # save fused prompt
         yaml = YAML()
-        with open(
-            f"competitions/{competition}/players/{merged_player}.yaml",
-            "w",
-        ) as f:
+        player_filename = f"competitions/{critiques[0]['competition']}/players/{merged_player}.yaml"
+        os.makedirs(os.path.dirname(player_filename), exist_ok=True)
+        with open(player_filename, "w") as f:
             yaml.dump(
                 {
                     "name": merged_player,
@@ -124,6 +117,7 @@ def merge_players(
                     "temperature": player_A["temperature"],
                     "ancestor-A": player_A_name,
                     "ancestor-B": player_B_name,
+                    "critiques": LS(critique_summary),
                     "prompt": LS(merged_completion),
                 },
                 f,

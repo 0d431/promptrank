@@ -1,3 +1,4 @@
+import logging
 from .claude_completion import get_simple_claude_completion
 from .gpt_completion import get_gpt_chat_completion, get_gpt_completion
 from .palm_completion import get_palm_completion
@@ -11,6 +12,7 @@ def complete(model, temperature, prompt, system=""):
         "claude-instant-1": get_simple_claude_completion,
         "claude-2": get_simple_claude_completion,
         "gpt-3.5-turbo": get_gpt_chat_completion,
+        "gpt-3.5-turbo-16k": get_gpt_chat_completion,
         "gpt-4": get_gpt_chat_completion,
         "text-davinci-003": get_gpt_completion,
         "gpt-3.5-turbo-instruct": get_gpt_completion,
@@ -24,7 +26,7 @@ def complete(model, temperature, prompt, system=""):
         exit(-1)
 
     if model in chat_models:
-        return completer(
+        completion = completer(
             prompt=prompt,
             model=model,
             temperature=temperature,
@@ -32,6 +34,18 @@ def complete(model, temperature, prompt, system=""):
             system=system,
         )
     else:
-        return completer(
+        completion = completer(
             prompt=prompt, model=model, temperature=temperature, max_tokens=500
         )
+
+    # log
+    logging.info(
+        "=====%s @ %s=====\n%s\n-----\n%s\n>>>>>\n%s",
+        model,
+        temperature,
+        system,
+        prompt,
+        completion,
+    )
+
+    return completion
