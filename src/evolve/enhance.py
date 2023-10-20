@@ -3,7 +3,7 @@ import os
 from ruamel.yaml import YAML
 from src.llm import complete
 from src.analyze import get_player_critique
-from .helper import LS, EVOLUTION_MODEL, generate_random_id
+from .helper import LS, EVOLUTION_MODEL, generate_random_id, ensure_single_placeholder_occurrence
 
 ##############################################
 PLAYER_CRITIQUES = """Tournament "{tournament}":
@@ -60,7 +60,7 @@ def enhance_player(tournaments, player_name, player_prefix, variations=1):
             {
                 "competition": tournament["meta"]["competition"]["name"],
                 "tournament": tournament["meta"]["tournament"],
-                "critique": get_player_critique(tournament, player_name),
+                "critique": get_player_critique(tournament, player_name, True),
                 "objective": tournament["evaluation"]["objective"],
                 "criteria": tournament["evaluation"]["criteria"],
                 "player_name": player_name,
@@ -90,6 +90,9 @@ def enhance_player(tournaments, player_name, player_prefix, variations=1):
         # clean
         enhanced_completion = re.sub(r"===[A-Z\s]+===", "", enhanced_completion)
         enhanced_completion = enhanced_completion.strip(" \n'\"")
+
+        # force replacement of all occurrences of placeholder {text}, except for the first one
+        enhanced_completion = ensure_single_placeholder_occurrence(enhanced_completion, "text")
 
         # save fused prompt
         yaml = YAML()

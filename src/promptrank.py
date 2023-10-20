@@ -7,7 +7,7 @@ import argparse
 import datetime
 from analyze import analyze_competition
 from evolve.evolve import evolve_season
-from match import play
+from match import play, reevaluate_matches
 
 
 def _build_parser():
@@ -46,6 +46,9 @@ def _build_parser():
         "-n", "--number", type=int, default=1, help="Number of matches to play."
     )
 
+    # 'reevaluate' command parser
+    reevaluate_parser = subparsers.add_parser("reevaluate", help="Re-evaluate matches.")
+
     # 'analyze' command parser
     analyze_parser = subparsers.add_parser(
         "analyze", help="Analyze player performance."
@@ -80,6 +83,8 @@ def main():
 
     if args.command == "play":
         play(args.competition, args.tournament, args.players, args.number)
+    if args.command == "reevaluate":
+        reevaluate_matches(args.competition, args.tournament, args.players)
     elif args.command == "analyze":
         analyze_competition(
             args.competition, args.tournament, args.players, args.critique

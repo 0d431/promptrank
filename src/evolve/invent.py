@@ -1,7 +1,7 @@
 import os
 from ruamel.yaml import YAML
 from src.llm import complete
-from .helper import LS, EVOLUTION_MODEL, generate_random_id
+from .helper import LS, EVOLUTION_MODEL, generate_random_id, ensure_single_placeholder_occurrence
 
 ##############################################
 TOURNAMENT_SUMMARIES = """Tournament "{tournament}":
@@ -22,11 +22,11 @@ The tool will compete in the following tournaments in the competition:
 The instruction template for the AI must reference the following Python f-string placeholders:
 {placeholders}
 
-Placeholders used in the instruction template will be replaced with the respective actual content during the tournament to generate the specific instructions.
+Placeholders used in the instruction template will be replaced with the respective actual content during the tournament to generate the specific instructions. Remember that you can only use the placeholders listed above and no others.
 
 Your task is to create the best possible instruction template for the AI tool to win the competition. You can give the AI a suitable persona in the instruction template, or use other means of putting it into the right frame. Be crafty and creative!
 
-Take note that there can be only one instruction template that will be used for all tournaments! You must under no circumstances mention or refer to the competition or its tournaments in the instruction template.
+Take note that there can be only one instruction template that will be used for all tournaments! You must under no circumstances refer to the competition or its tournaments in the instruction template.
 
 Take a deep breath and carefully analyze the tournament objectives and evaluation criteria.
 
@@ -72,10 +72,13 @@ def invent_player(tournaments, model, temperature, player_prefix, variations=1):
         invented_players.append(invented_player)
 
         print(f"Generating {invented_player} - variation {ix+1} of {variations}...")
-        invented_completion = complete(EVOLUTION_MODEL, 1.0, prompt)
+        invented_completion = complete(EVOLUTION_MODEL, 0.7, prompt)
 
         # clean
         invented_completion = invented_completion.strip(" \n'\"")
+
+        # force replacement of all occurrences of placeholder {text}, except for the first one
+        invented_completion = ensure_single_placeholder_occurrence(invented_completion, "text")
 
         # save fused prompt
         yaml = YAML()

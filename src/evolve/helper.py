@@ -17,4 +17,10 @@ def LS(s):
 
 
 #################################################
+def ensure_single_placeholder_occurrence(text, placeholder):
+    text = text.replace(f"{placeholder}", "---fofofox---", 1)
+    text = text.replace(f"{placeholder}", "text")
+    return text.replace("---fofofox---", f"{placeholder}")
+
+
 EVOLUTION_MODEL = "gpt-4"

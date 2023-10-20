@@ -11,7 +11,7 @@ from tournament import load_tournament, resolve_tournaments
 
 
 ##############################################
-def run_in_parallel(fun, args, max_workers=5):
+def run_in_parallel(fun, args, max_workers=10):
     """Execute a function in parallel on a set of args"""
     results = []
 
@@ -141,7 +141,7 @@ def _evaluate(tournament, challenge, player_A_name, output_A, player_B_name, out
         print("Failed to parse evaluation: " + evaluation)
         exit(-1)
 
-    match = re.search(r"(?<=Winner: ).*?$", evaluation)
+    match = re.search(r"(?<=Winner: ).*\b", evaluation)
     if match:
         winner = match.group(0).strip()
     else:
@@ -283,7 +283,7 @@ def play(competition, tournament_name, player_set, number_matches, player_name=N
 
         while True:
             min_matches_all_players = play_next_matches(
-                tournament, number_matches, player_name, 5
+                tournament, number_matches, player_name, 10
             )
             print(
                 f"    {tournament_name.upper()} - {len(tournament['matches'])} matches played; {min_matches_all_players:.0f}/{number_matches} {objective}"
@@ -292,3 +292,26 @@ def play(competition, tournament_name, player_set, number_matches, player_name=N
                 break
 
     return tournaments
+
+
+##############################################
+def reevaluate_matches(competition, tournament_name, player_set):
+    """Re-evaluate all matches of the tournament"""
+    
+    for tournament_name in resolve_tournaments(competition, tournament_name):        
+        ix = 1
+        tournament = load_tournament(competition, tournament_name, player_set)
+        
+        print(
+            f"Reevaluating all matches in player set {player_set.upper()} for tournament {tournament_name.upper()}..."
+        )
+
+        for match_name, match in tournament["matches"].items():
+            player_A_name = match["player_A"]["name"]
+            player_B_name = match["player_B"]["name"]
+            challenge_name = match["challenge"]
+
+            tournament["matches"][match_name] = _play_match(tournament, challenge_name, player_A_name, player_B_name)
+
+            print(f"    {ix}/{len(tournament['matches'])} matches re-evaluated for tournament {tournament_name.upper()}")
+            ix += 1

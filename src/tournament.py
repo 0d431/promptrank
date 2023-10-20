@@ -24,7 +24,7 @@ def resolve_tournaments(competition, tournament=""):
 
 
 ##############################################
-def load_tournament(competition, tournament, player_set="", discard_outdated=False):
+def load_tournament(competition, tournament, player_set="", discard_outdated=True):
     """Load the competition into a structure representing its state"""
 
     print(
@@ -93,6 +93,11 @@ def load_tournament(competition, tournament, player_set="", discard_outdated=Fal
         with open(player_filename, "r") as file:
             player = yaml.safe_load(file)
             player_name = player.get("name", _get_name_from_path(player_filename))
+
+            if player_name in tournament_state["players"]:
+                print(
+                    f"      WARNING: player {player_name} already exists, overwriting"
+                )
 
             tournament_state["players"][player_name] = player
             tournament_state["players"][player_name]["name"] = player_name

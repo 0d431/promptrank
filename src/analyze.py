@@ -7,6 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from llm import complete
+from src.elo import calculate_winning_likelihoods, estimate_elo
 from src.tournament import load_tournaments
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
@@ -100,6 +101,11 @@ def _generate_tournament_analysis(tournament, do_critique):
     average = tournament["stats"]["average"]
     stddev = tournament["stats"]["stddev"]
 
+    # estimate ELO
+    elo, loss = estimate_elo(*calculate_winning_likelihoods(list(leaderboard.keys()), tournament["matches"].values()))
+    elo = { player_name: elo[i] for i, player_name in enumerate(leaderboard.keys()) }
+    print(f"LOSS: {math.sqrt(loss):.3f}")
+
     # dump as markdown
     analysis = ""
     analysis = f"\n## {tournament['meta']['competition']['name'].capitalize()} / {tournament['meta']['tournament'].capitalize()} / {tournament['meta']['player_set']}\n"
@@ -113,7 +119,7 @@ def _generate_tournament_analysis(tournament, do_critique):
     )
     for player_name, player_stat in leaderboard.items():
         score_stat = f"**{player_stat['score']:.2f}**: {player_stat['wins']}-{player_stat['draws']}-{player_stat['losses']}"
-        analysis += f"**{player_name}**|{score_stat}|{(player_stat['score'] - average)/stddev:.1f}|{player_stat['elo']:.0f}|{get_player_critique(tournament, player_name, do_critique)}|\n"
+        analysis += f"**{player_name}**|{score_stat}|{(player_stat['score'] - average)/stddev:.1f}|{elo[player_name]:.0f}|{get_player_critique(tournament, player_name, do_critique)}|\n"
 
     return analysis
 
@@ -124,8 +130,21 @@ def _generate_competition_analysis(tournaments):
 
     # collect aggregated stats per tournament and player
     aggregated_stats = {}
+    observed_probs = None
+    observations = None
+    player_names = list(next(iter(tournaments.values()))["players"])
     for tournament in tournaments.values():
         leaderboard = tournament["leaderboard"]
+
+        # estimate ELO
+        tournament_OP, tournament_O = calculate_winning_likelihoods(player_names, tournament["matches"].values())
+        if observed_probs is None:
+            observed_probs = tournament_OP
+            observations = tournament_O
+        else:
+            observed_probs += tournament_OP
+            observations += tournament_O
+
         for player in leaderboard:
             if player not in aggregated_stats:
                 aggregated_stats[player] = {
@@ -163,6 +182,12 @@ def _generate_competition_analysis(tournaments):
         )
     }
 
+    # get ELO
+    elo, loss = estimate_elo(observed_probs/len(tournaments), observations)
+    elo = { player_name: elo[i] for i, player_name in enumerate(player_names) }
+    print(f"LOSS: {math.sqrt(loss):.3f}")
+
+
     # dump as markdown
     first_tournament = next(iter(tournaments.values()))
 
@@ -172,14 +197,14 @@ def _generate_competition_analysis(tournaments):
     analysis += f"{len(first_tournament['players'])} players"
     analysis += f"\nMedian {agg_median:.2f}; average {agg_average:.2f} +/- {agg_stddev:.2f} stddev\n"
 
-    analysis += "\n| Player | Total Score | Total Score Dev |"
+    analysis += "\n| Player | Total Score | Total Score Dev | ELO |"
     for tournament_name in tournaments:
         analysis += f" {tournament_name.capitalize()} Score | {tournament_name.capitalize()} Score Dev |"
-    analysis += f"\n|---|---|---|{'---|'*2*len(tournaments)}\n"
+    analysis += f"\n|---|---|---|---|{'---|'*2*len(tournaments)}\n"
 
     for player_name, player_stat in aggregated_stats.items():
         score_stat = f"**{player_stat['score']:.2f}**<br/>{player_stat['wins']}-{player_stat['draws']}-{player_stat['losses']}"
-        analysis += f"**{player_name}**|{score_stat}|{(player_stat['score'] - agg_average)/agg_stddev:.1f}|"
+        analysis += f"**{player_name}**|{score_stat}|{(player_stat['score'] - agg_average)/agg_stddev:.1f}|{elo[player_name]:.0f}|"
         for tournament in tournaments.values():
             leaderboard = tournament["leaderboard"]
             score_stat = f"**{leaderboard[player_name]['score']:.2f}**<br/>{leaderboard[player_name]['wins']}-{leaderboard[player_name]['draws']}-{leaderboard[player_name]['losses']}"
@@ -228,19 +253,6 @@ def _plot_history(history, title, columns, axis_label, axis_min, axis_max, outpu
     plt.savefig(output_file)
     plt.close()
 
-
-##############################################
-def plot_elo_history(leaderboard, output_file):
-    """Plot the ELO history of all players."""
-    _plot_history(
-        {k: v["elo_history"] for k, v in leaderboard.items()},
-        "ELO evolution",
-        leaderboard.keys(),
-        "ELO",
-        750,
-        1250,
-        output_file,
-    )
 
 
 ##############################################
@@ -301,33 +313,8 @@ def plot_score_matrix(players, matches, games_output_file, scores_output_file):
     """Plot a matrix of score stats of each player pair."""
 
     # Create a matrix of scores
-    matrix = np.zeros((len(players), len(players)))
-    match_count = np.zeros((len(players), len(players)))
-
     labels = list(players)
-
-    for match in matches:
-        player_A_name = match["player_A"]["name"]
-        player_B_name = match["player_B"]["name"]
-
-        if match["result"]["winner"] == "DRAW":
-            matrix[labels.index(player_A_name), labels.index(player_B_name)] += 0.5
-            matrix[labels.index(player_B_name), labels.index(player_A_name)] += 0.5
-        elif match["result"]["winner"] == player_A_name:
-            matrix[labels.index(player_A_name), labels.index(player_B_name)] += 1.0
-        elif match["result"]["winner"] == player_B_name:
-            matrix[labels.index(player_B_name), labels.index(player_A_name)] += 1.0
-        else:
-            # ignore DNP
-            continue
-
-        match_count[labels.index(player_A_name), labels.index(player_B_name)] += 1
-        match_count[labels.index(player_B_name), labels.index(player_A_name)] += 1
-
-    # divide matrix by number of matches
-    matrix = np.divide(
-        matrix, match_count, out=np.zeros_like(matrix), where=matches != 0
-    )
+    matrix, match_count = calculate_winning_likelihoods(labels, matches)
 
     _plot_matrix(match_count, labels, "{value:.0f}", games_output_file)
     _plot_matrix(matrix, labels, "{value:.2f}", scores_output_file)
@@ -354,17 +341,12 @@ def analyze_tournaments(tournaments, do_critique):
         with open(f"{path}/{tournament_name}.md", "w") as f:
             f.write(
                 analysis
-                + f"\n\n### ELO History\n![ELO History](./{tournament_name}-elo-history.png)"
                 + f"\n\n### Score History\n![Score History](./{tournament_name}-score-history.png)"
                 + f"\n\n### Score Matrix\n![Score Matrix](./{tournament_name}-score-matrix.png)"
                 + f"\n\n### Game Matrix\n![Game Matrix](./{tournament_name}-game-matrix.png)"
             )
 
         # plot histories
-        plot_elo_history(
-            tournament["leaderboard"],
-            f"{path}/{tournament_name}-elo-history.png",
-        )
         plot_score_history(
             tournament["leaderboard"],
             f"{path}/{tournament_name}-score-history.png",

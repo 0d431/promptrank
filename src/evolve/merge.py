@@ -3,7 +3,12 @@ import os
 from ruamel.yaml import YAML
 from src.analyze import get_player_critique
 from src.llm import complete
-from .helper import LS, EVOLUTION_MODEL, generate_random_id
+from .helper import (
+    LS,
+    EVOLUTION_MODEL,
+    generate_random_id,
+    ensure_single_placeholder_occurrence,
+)
 
 
 ##############################################
@@ -51,7 +56,9 @@ Now, it is time to write the best possible instructions based on the learnings f
 
 
 ##############################################
-def merge_players(tournaments, player_A_name, player_B_name, player_prefix, variations=1):
+def merge_players(
+    tournaments, player_A_name, player_B_name, player_prefix, variations=1
+):
     # collect player's critiques
 
     player_A = player_B = None
@@ -70,8 +77,8 @@ def merge_players(tournaments, player_A_name, player_B_name, player_prefix, vari
             {
                 "competition": tournament["meta"]["competition"]["name"],
                 "tournament": tournament["meta"]["tournament"],
-                "critique_A": get_player_critique(tournament, player_A_name),
-                "critique_B": get_player_critique(tournament, player_B_name),
+                "critique_A": get_player_critique(tournament, player_A_name, True),
+                "critique_B": get_player_critique(tournament, player_B_name, True),
                 "objective": tournament["evaluation"]["objective"],
                 "criteria": tournament["evaluation"]["criteria"],
                 "player_A": player_A_name,
@@ -105,9 +112,16 @@ def merge_players(tournaments, player_A_name, player_B_name, player_prefix, vari
         merged_completion = re.sub(r"===[A-Z\s]+===", "", merged_completion)
         merged_completion = merged_completion.strip(" \n'\"")
 
+        # force replacement of all occurrences of placeholder {text}, except for the first one
+        merged_completion = ensure_single_placeholder_occurrence(
+            merged_completion, "text"
+        )
+
         # save fused prompt
         yaml = YAML()
-        player_filename = f"competitions/{critiques[0]['competition']}/players/{merged_player}.yaml"
+        player_filename = (
+            f"competitions/{critiques[0]['competition']}/players/{merged_player}.yaml"
+        )
         os.makedirs(os.path.dirname(player_filename), exist_ok=True)
         with open(player_filename, "w") as f:
             yaml.dump(

@@ -2,6 +2,7 @@ from typing import List
 from tenacity import (
     retry,
     wait_random_exponential,
+    wait_fixed,
     stop_after_attempt,
     retry_if_not_exception_type,
 )
@@ -45,7 +46,7 @@ def get_gpt_completions(
 
 
 @retry(
-    wait=wait_random_exponential(min=0.5, max=30),
+    wait=wait_fixed(10),
     stop=stop_after_attempt(5),
     retry=retry_if_not_exception_type(openai.error.InvalidRequestError),
 )

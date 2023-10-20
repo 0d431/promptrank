@@ -2,11 +2,6 @@ import json
 import random
 import numpy as np
 
-INITIAL_K = 10.0
-FINAL_K = 1.0
-INITIAL_MATCHES = 10
-TRANSITION_MATCHES = 50
-
 
 ##############################################
 def generate_leaderboard(tournament, initial_elo=1000.0):
@@ -17,11 +12,8 @@ def generate_leaderboard(tournament, initial_elo=1000.0):
     for player in tournament["players"]:
         # set up initial leaderboard entry for new player
         tournament["leaderboard"][player] = {
-            "elo": initial_elo,
-            "elo_history": [],
             "score": 0.5,
             "score_history": [],
-            "k_factor": INITIAL_K,
             "wins": 0,
             "losses": 0,
             "draws": 0,
@@ -74,57 +66,18 @@ def update_leaderboard(tournament, match, save=True):
     player_A_stats = tournament["leaderboard"][player_A_name]
     player_B_stats = tournament["leaderboard"][player_B_name]
 
-    # get current elos & k-factor, pre-match
-    player_A_elo = player_A_stats["elo"]
-    player_B_elo = player_B_stats["elo"]
-    player_A_k_factor = player_A_stats["k_factor"]
-    player_B_k_factor = player_B_stats["k_factor"]
-
-    # calculate expected performance
-    player_A_expected = 1.0 / (1.0 + pow(10.0, (player_B_elo - player_A_elo) / 400.0))
-    player_B_expected = 1.0 / (1.0 + pow(10.0, (player_A_elo - player_B_elo) / 400.0))
-
-    # update the player's performance
-    player_A_actual = player_B_actual = None
-
     player_A_stats["matches"] += 1
     player_B_stats["matches"] += 1
 
     if winner_name == player_A_name:
-        player_A_actual = 1.0
         player_A_stats["wins"] += 1
-
-        player_B_actual = 0.0
         player_B_stats["losses"] += 1
     elif winner_name == player_B_name:
-        player_A_actual = 0.0
         player_A_stats["losses"] += 1
-
-        player_B_actual = 1.0
         player_B_stats["wins"] += 1
     else:
-        player_A_actual = 0.5
         player_A_stats["draws"] += 1
-
-        player_B_actual = 0.5
         player_B_stats["draws"] += 1
-
-    # update elo
-    player_A_stats["elo_history"].append(player_A_elo)
-    player_A_stats["elo"] += player_A_k_factor * (player_A_actual - player_A_expected)
-    player_B_stats["elo_history"].append(player_B_elo)
-    player_B_stats["elo"] += player_B_k_factor * (player_B_actual - player_B_expected)
-
-    # re-calc K factor based on number of matches
-    def _calc_k(matches):
-        return max(
-            INITIAL_K
-            / (1 + 10.0 / TRANSITION_MATCHES * max(0, (matches - INITIAL_MATCHES))),
-            FINAL_K,
-        )
-
-    player_A_stats["k_factor"] = _calc_k(player_A_stats["matches"])
-    player_B_stats["k_factor"] = _calc_k(player_B_stats["matches"])
 
     # update score
     player_A_stats["score_history"].append(player_A_stats["score"])

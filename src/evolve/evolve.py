@@ -5,25 +5,26 @@ from match import play
 from .invent import invent_player
 from .enhance import enhance_player
 from .merge import merge_players
+from src.analyze import analyze_tournaments
 
 
 # The number of matches for full evaluation
-FULL_SEASON_MATCHES = 12
+FULL_SEASON_MATCHES = 10
 
 # The number of initial matches during initial audition against the refernce player
-INITIAL_AUDITION_MATCHES = 12
+INITIAL_AUDITION_MATCHES = 10
 
 # Winners per season
-WINNERS_PER_SEASON = 4
+WINNERS_PER_SEASON = 5
 
 # Initial challengers per season
-CHALLENGERS_PER_SEASON = 10
+CHALLENGERS_PER_SEASON = 15
 
 # Surviving challengers per season
 SURVIVING_CHALLENGERS_PER_SEASON = 5
 
 # The model for new inventions
-INVENTION_MODEL = "gpt-3.5-turbo"
+INVENTION_MODELS = ["gpt-3.5-turbo-instruct", "gpt-3.5-turbo"]
 
 # The temperature for new inventions
 INVENTION_TEMPERATURE = 0.0
@@ -68,6 +69,8 @@ def _collect_winners(tournaments, reference_player, number_of_winners):
         player: math.pow(score, 1.0 / len(tournaments))
         for player, score in balanced_scores.items()
     }
+    best_balanced_player = max(balanced_scores, key=balanced_scores.get)
+    print(f"   Best balanced player is {best_balanced_player} with balanced score {balanced_scores[best_balanced_player]:.2f}")
 
     # fetch the best balanced players to reach N winners
     while len(winners) < number_of_winners and len(balanced_scores) > 0:
@@ -76,13 +79,13 @@ def _collect_winners(tournaments, reference_player, number_of_winners):
             winner_score = balanced_scores[winner]
 
             # only consider players that are above 50% balanced score
-            if winner_score > 0.5:
+            if winner_score > 0.4:
                 winners.add(winner)
                 print(f"   {winner} achieved top balanced score {winner_score:.2f}")
 
         del balanced_scores[winner]
 
-    return list(winners)[:number_of_winners]
+    return list(winners)[:number_of_winners], best_balanced_player
 
 
 ##############################################
@@ -99,7 +102,7 @@ def _create_challengers(
     number_of_inventions = int(0.2 * CHALLENGERS_PER_SEASON)
     invented_players = invent_player(
         tournaments,
-        INVENTION_MODEL,
+        random.choice(INVENTION_MODELS),
         INVENTION_TEMPERATURE,
         season,
         number_of_inventions,
@@ -152,13 +155,17 @@ def _create_challengers(
 
 ##############################################
 def _cull_challengers(
-    auditions, previous_season_winners, reference_player, full_season_player_set
+    auditions,
+    previous_season_winners,
+    challenger_player,
+    reference_player,
+    full_season_player_set,
 ):
     """Cull the underperforming challengers and create the full season player set."""
 
     # collect the audition winners
-    audition_winners = _collect_winners(
-        auditions, reference_player, SURVIVING_CHALLENGERS_PER_SEASON
+    audition_winners, _best_balanced_performer = _collect_winners(
+        auditions, challenger_player, SURVIVING_CHALLENGERS_PER_SEASON
     )
 
     # now, create the full season player set
@@ -201,9 +208,12 @@ def evolve_season(competition, player_set, reference_player):
 
     # make sure all tournaments are fully played
     tournaments = play(competition, "", this_season_player_set, FULL_SEASON_MATCHES)
+    analyze_tournaments(tournaments, False)
 
     # collect the winners of the season
-    season_winners = _collect_winners(tournaments, reference_player, WINNERS_PER_SEASON)
+    season_winners, best_balanced_player = _collect_winners(
+        tournaments, reference_player, WINNERS_PER_SEASON
+    )
 
     # finish season and create challengers, unless that has been done already
     challenger_player_set = f"{new_season_player_set}-challengers"
@@ -215,7 +225,7 @@ def evolve_season(competition, player_set, reference_player):
             tournaments,
             new_season_player_set + "/",
             season_winners,
-            reference_player,
+            best_balanced_player,
             challenger_player_set,
         )
     else:
@@ -227,12 +237,18 @@ def evolve_season(competition, player_set, reference_player):
         "",
         challenger_player_set,
         INITIAL_AUDITION_MATCHES,
-        reference_player,
+        best_balanced_player,
     )
+    analyze_tournaments(auditions, False)
+
 
     # now cull underperformes from audition and create the full season player set
     _cull_challengers(
-        auditions, season_winners, reference_player, new_season_player_set
+        auditions,
+        season_winners,
+        best_balanced_player,
+        reference_player,
+        new_season_player_set,
     )
 
     print(f"Prepared evolved next season on player set {new_season_player_set}.")
