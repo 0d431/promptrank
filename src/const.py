@@ -1,0 +1,2 @@
+TOURNAMENT = "tournaments"
+GRADING = "gradings"

@@ -1,30 +1,30 @@
 import os
 import math
 import random
-from match import play
+from play.duel import play
 from .invent import invent_player
 from .enhance import enhance_player
 from .merge import merge_players
-from src.analyze import analyze_tournaments
+from analyze.analyze import analyze_tournaments
 
 
 # The number of matches for full evaluation
-FULL_SEASON_MATCHES = 10
+FULL_SEASON_MATCHES = 25
 
 # The number of initial matches during initial audition against the refernce player
-INITIAL_AUDITION_MATCHES = 10
+INITIAL_AUDITION_MATCHES = 12
 
 # Winners per season
-WINNERS_PER_SEASON = 5
+WINNERS_PER_SEASON = 4
 
 # Initial challengers per season
-CHALLENGERS_PER_SEASON = 15
+CHALLENGERS_PER_SEASON = 12
 
 # Surviving challengers per season
-SURVIVING_CHALLENGERS_PER_SEASON = 5
+SURVIVING_CHALLENGERS_PER_SEASON = 4
 
 # The model for new inventions
-INVENTION_MODELS = ["gpt-3.5-turbo-instruct", "gpt-3.5-turbo"]
+INVENTION_MODELS = ["gpt-3.5-turbo-instruct"]
 
 # The temperature for new inventions
 INVENTION_TEMPERATURE = 0.0

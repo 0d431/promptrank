@@ -27,7 +27,7 @@ def get_claude_completion(
 
 
 def get_simple_claude_completion(
-    prompt: str = "",
+    prompt: str,
     model="claude-instant-1",
     temperature=0.0,
     max_tokens=50,
@@ -36,6 +36,26 @@ def get_simple_claude_completion(
     """Run a prompt completion with Claude with default prompt adornment, retrying with backoff in failure case."""
     response = get_claude_completion(
         f"{anthropic.HUMAN_PROMPT}{prompt}{anthropic.AI_PROMPT}",
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stop=stop,
+    )
+
+    return response
+
+
+def get_system_claude_completion(
+    system: str,
+    prompt: str,
+    model="claude-instant-1",
+    temperature=0.0,
+    max_tokens=50,
+    stop=anthropic.HUMAN_PROMPT,
+) -> str:
+    """Run a prompt completion with Claude with default prompt adornment, retrying with backoff in failure case."""
+    response = get_claude_completion(
+        f"{system}{anthropic.HUMAN_PROMPT}{prompt}{anthropic.AI_PROMPT}",
         model=model,
         temperature=temperature,
         max_tokens=max_tokens,

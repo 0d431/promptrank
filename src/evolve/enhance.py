@@ -2,7 +2,7 @@ import re
 import os
 from ruamel.yaml import YAML
 from src.llm import complete
-from src.analyze import get_player_critique
+from analyze.analyze import get_player_critique
 from .helper import LS, EVOLUTION_MODEL, generate_random_id, ensure_single_placeholder_occurrence
 
 ##############################################

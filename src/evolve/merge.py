@@ -1,7 +1,7 @@
 import re
 import os
 from ruamel.yaml import YAML
-from src.analyze import get_player_critique
+from analyze.analyze import get_player_critique
 from src.llm import complete
 from .helper import (
     LS,

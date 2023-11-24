@@ -23,4 +23,4 @@ def ensure_single_placeholder_occurrence(text, placeholder):
     return text.replace("---fofofox---", f"{placeholder}")
 
 
-EVOLUTION_MODEL = "gpt-4"
+EVOLUTION_MODEL = "gpt-4-1106-preview"

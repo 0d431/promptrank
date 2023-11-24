@@ -1,32 +1,14 @@
 import re
-import os
 import json
 import random
-import datetime
 import numpy as np
-import concurrent.futures
 from llm import complete
-from leaderboard import update_leaderboard
-from tournament import load_tournament, resolve_tournaments
+from competition.leaderboard import update_leaderboard
+from competition.tournament import load_tournament
+from competition.loader import resolve_elements
+from const import TOURNAMENT
+from src.play.perform import *
 
-
-##############################################
-def run_in_parallel(fun, args, max_workers=10):
-    """Execute a function in parallel on a set of args"""
-    results = []
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_arg = {executor.submit(fun, *arg): arg for arg in args}
-        for future in concurrent.futures.as_completed(future_to_arg):
-            results.append(future.result())
-
-    return results
-
-
-##############################################
-def _escape_player_name(player_name):
-    """Escape a player name for use in a filename"""
-    return player_name.replace("/", "=")
 
 
 ##############################################
@@ -36,21 +18,16 @@ def _get_match_id(challenge_name, player_A_name, player_B_name):
     return (
         challenge_name
         + ":"
-        + _escape_player_name(player_A_name)
+        + escape_player_name(player_A_name)
         + "<>"
-        + _escape_player_name(player_B_name)
+        + escape_player_name(player_B_name)
     )
 
 
 ##############################################
-def _get_performance_id(challenge_name, player_name):
-    """Generate a unique ID for a performance"""
-
-    return challenge_name + ":" + _escape_player_name(player_name)
-
-
-##############################################
-def _find_match(tournament_state, min_matches_to_play, player_name=None, scheduled_matches=[]):
+def _find_match(
+    tournament_state, min_matches_to_play, player_name=None, scheduled_matches=[]
+):
     """Find the next match to play"""
 
     def _randomize(it):
@@ -157,37 +134,6 @@ def _evaluate(tournament, challenge, player_A_name, output_A, player_B_name, out
 
 
 ##############################################
-def _perform(tournament, challenge_name, player):
-    """Perform a performance for a player"""
-
-    performance_file = f"competitions/{tournament['meta']['competition']['name']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
-    if not os.path.exists(performance_file):
-        # create the performance
-        # print(f"      {player['name']} performs {challenge_name}")
-        challenge = tournament["challenges"][challenge_name]
-        challenge["date"] = f"{datetime.datetime.now():%Y-%m-%d}"
-        performance = {
-            "player": player["name"],
-            "challenge": challenge_name,
-            "output": complete(
-                player["model"],
-                player["temperature"],
-                player["prompt"].format(**challenge),
-            ),
-        }
-
-        # store the performance
-        with open(performance_file, "w") as file:
-            json.dump(performance, file, indent=2)
-    else:
-        # load the performance
-        with open(performance_file, "r") as file:
-            performance = json.load(file)
-
-    return performance
-
-
-##############################################
 def _play_match(tournament, challenge_name, player_A_name, player_B_name):
     """Play a match between two players"""
 
@@ -199,7 +145,7 @@ def _play_match(tournament, challenge_name, player_A_name, player_B_name):
     # perform performances if needed
     performances = {}
     for player in (player_A, player_B):
-        performances[player["name"]] = _perform(tournament, challenge_name, player)
+        performances[player["name"]] = perform(tournament, challenge_name, player)
 
     # perform the evaluation
     player_A_output = performances[player_A_name]["output"]
@@ -219,8 +165,11 @@ def _play_match(tournament, challenge_name, player_A_name, player_B_name):
         "id": id,
         "player_A": {"name": player_A_name},
         "player_B": {"name": player_B_name},
-        "challenge": challenge["name"],
         "result": {"winner": winner_name, "assessment": assessment},
+        "challenge": challenge["name"],
+        "challenge_details": challenge,
+        "player_A_output": player_A_output,
+        "player_B_output": player_B_output,
     }
 
     # store the match
@@ -273,7 +222,7 @@ def play(competition, tournament_name, player_set, number_matches, player_name=N
     objective = f"against {player_name}" if player_name else "for all player pairs"
 
     tournaments = {}
-    for tournament_name in resolve_tournaments(competition, tournament_name):
+    for tournament_name in resolve_elements(competition, TOURNAMENT, tournament_name):
         print(
             f"Playing {number_matches} matches {objective} in player set {player_set.upper()} for tournament {tournament_name.upper()}..."
         )
@@ -297,11 +246,11 @@ def play(competition, tournament_name, player_set, number_matches, player_name=N
 ##############################################
 def reevaluate_matches(competition, tournament_name, player_set):
     """Re-evaluate all matches of the tournament"""
-    
-    for tournament_name in resolve_tournaments(competition, tournament_name):        
+
+    for tournament_name in resolve_elements(competition, TOURNAMENT, tournament_name):
         ix = 1
         tournament = load_tournament(competition, tournament_name, player_set)
-        
+
         print(
             f"Reevaluating all matches in player set {player_set.upper()} for tournament {tournament_name.upper()}..."
         )
@@ -311,7 +260,11 @@ def reevaluate_matches(competition, tournament_name, player_set):
             player_B_name = match["player_B"]["name"]
             challenge_name = match["challenge"]
 
-            tournament["matches"][match_name] = _play_match(tournament, challenge_name, player_A_name, player_B_name)
+            tournament["matches"][match_name] = _play_match(
+                tournament, challenge_name, player_A_name, player_B_name
+            )
 
-            print(f"    {ix}/{len(tournament['matches'])} matches re-evaluated for tournament {tournament_name.upper()}")
+            print(
+                f"    {ix}/{len(tournament['matches'])} matches re-evaluated for tournament {tournament_name.upper()}"
+            )
             ix += 1

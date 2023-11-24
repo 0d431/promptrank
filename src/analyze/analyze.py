@@ -7,12 +7,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from llm import complete
-from src.elo import calculate_winning_likelihoods, estimate_elo
-from src.tournament import load_tournaments
+from analyze.elo import calculate_winning_likelihoods, estimate_elo
+from competition.tournament import load_tournaments
+from src.const import TOURNAMENT
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-CRITIQUE_MODEL = "gpt-3.5-turbo-16k"
+CRITIQUE_MODEL = "gpt-4-1106-preview"
 
 ##############################################
 CRITIQUE_PROMPT = """The player {player} is participating in a tournament with the aim to {objective}. The player has received the following assessments of their performance against opponents in their matches:
@@ -108,7 +109,7 @@ def _generate_tournament_analysis(tournament, do_critique):
 
     # dump as markdown
     analysis = ""
-    analysis = f"\n## {tournament['meta']['competition']['name'].capitalize()} / {tournament['meta']['tournament'].capitalize()} / {tournament['meta']['player_set']}\n"
+    analysis = f"\n## {tournament['meta']['competition']['name'].capitalize()} / {tournament['meta'][TOURNAMENT].capitalize()} / {tournament['meta']['player_set']}\n"
     analysis += f"{len(tournament['players'])} players, {len(tournament['challenges'])} challenges, "
     analysis += f"{len(tournament['matches'])} out of {tournament['meta']['pairings']} matches played\n"
     analysis += (
@@ -332,7 +333,7 @@ def analyze_tournaments(tournaments, do_critique):
         analysis = _generate_tournament_analysis(tournament, do_critique)
 
         player_set = tournament["meta"]["player_set"]
-        tournament_name = tournament["meta"]["tournament"]
+        tournament_name = tournament["meta"][TOURNAMENT]
 
         path = f"competitions/{competition}/analysis/{player_set}"
         if not os.path.exists(path):

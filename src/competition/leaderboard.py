@@ -1,6 +1,7 @@
 import json
 import random
 import numpy as np
+from const import TOURNAMENT
 
 
 ##############################################
@@ -35,7 +36,7 @@ def save_leaderboard(tournament):
     """Persist the updated matches and the leaderboard"""
 
     competition = tournament["meta"]["competition"]["name"]
-    tournament_name = tournament["meta"]["tournament"]
+    tournament_name = tournament["meta"][TOURNAMENT]
 
     # write the leaderboard ordered by descending elo
     with open(

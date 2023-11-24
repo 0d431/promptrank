@@ -5,9 +5,10 @@ dotenv.load_dotenv()
 import logging
 import argparse
 import datetime
-from analyze import analyze_competition
+from analyze.analyze import analyze_competition
 from evolve.evolve import evolve_season
-from match import play, reevaluate_matches
+from play.duel import play, reevaluate_matches
+from play.grade import grade_players
 
 
 def _build_parser():
@@ -44,6 +45,12 @@ def _build_parser():
     play_parser = subparsers.add_parser("play", help="Play matches.")
     play_parser.add_argument(
         "-n", "--number", type=int, default=1, help="Number of matches to play."
+    )
+
+    # 'grade' command parser
+    grade_parser = subparsers.add_parser("grade", help="Grade players.")
+    grade_parser.add_argument(
+        "-n", "--number", type=int, default=1, help="Number of performances to rate."
     )
 
     # 'reevaluate' command parser
@@ -85,6 +92,8 @@ def main():
         play(args.competition, args.tournament, args.players, args.number)
     if args.command == "reevaluate":
         reevaluate_matches(args.competition, args.tournament, args.players)
+    if args.command == "grade":
+        grade_players(args.competition, args.tournament, args.players, args.number)
     elif args.command == "analyze":
         analyze_competition(
             args.competition, args.tournament, args.players, args.critique
