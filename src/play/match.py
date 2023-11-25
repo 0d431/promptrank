@@ -3,12 +3,9 @@ import json
 import random
 import numpy as np
 from llm import complete
-from competition.leaderboard import update_leaderboard
-from competition.tournament import load_tournament
-from competition.loader import resolve_elements
-from const import TOURNAMENT
+from competition.leaderboard import update_leaderboard_with_match
+from competition.loader import load_tournament, resolve_tournaments
 from src.play.perform import *
-
 
 
 ##############################################
@@ -99,16 +96,16 @@ def _evaluate(tournament, challenge, player_A_name, output_A, player_B_name, out
 
     # print(f"      {tournament['meta']['tournament'].upper()} - evaluating {player_A_name} vs {player_B_name} on {challenge['name']}")
     evaluation = complete(
-        tournament["evaluation"]["model"],
-        tournament["evaluation"]["temperature"],
-        prompt=tournament["evaluation"]["prompt"].format(
+        prompt=tournament["comparison"]["prompt"].format(
             **challenge,
-            objective=tournament["evaluation"]["objective"],
-            criteria=tournament["evaluation"]["criteria"],
+            objective=tournament["comparison"]["objective"],
+            criteria=tournament["comparison"]["criteria"],
             output_A=output_A,
             output_B=output_B,
         ),
-        system=tournament["evaluation"].get("system", ""),
+        system=tournament["comparison"].get("system", ""),
+        model=tournament["comparison"]["model"],
+        temperature=tournament["comparison"]["temperature"],
     )
 
     match = re.search(r"(?<=Assessment: ).*?(?=\n)", evaluation)
@@ -209,62 +206,7 @@ def play_next_matches(
     # update leaderboard
     for match in matches:
         tournament["matches"][match["id"]] = match
-        update_leaderboard(tournament, match)
+        update_leaderboard_with_match(tournament, match)
 
     # return the new minimum number of matches played
     return next_min_matches
-
-
-##############################################
-def play(competition, tournament_name, player_set, number_matches, player_name=None):
-    """Play a number of matches."""
-
-    objective = f"against {player_name}" if player_name else "for all player pairs"
-
-    tournaments = {}
-    for tournament_name in resolve_elements(competition, TOURNAMENT, tournament_name):
-        print(
-            f"Playing {number_matches} matches {objective} in player set {player_set.upper()} for tournament {tournament_name.upper()}..."
-        )
-
-        tournament = load_tournament(competition, tournament_name, player_set)
-        tournaments[tournament_name] = tournament
-
-        while True:
-            min_matches_all_players = play_next_matches(
-                tournament, number_matches, player_name, 10
-            )
-            print(
-                f"    {tournament_name.upper()} - {len(tournament['matches'])} matches played; {min_matches_all_players:.0f}/{number_matches} {objective}"
-            )
-            if min_matches_all_players >= number_matches:
-                break
-
-    return tournaments
-
-
-##############################################
-def reevaluate_matches(competition, tournament_name, player_set):
-    """Re-evaluate all matches of the tournament"""
-
-    for tournament_name in resolve_elements(competition, TOURNAMENT, tournament_name):
-        ix = 1
-        tournament = load_tournament(competition, tournament_name, player_set)
-
-        print(
-            f"Reevaluating all matches in player set {player_set.upper()} for tournament {tournament_name.upper()}..."
-        )
-
-        for match_name, match in tournament["matches"].items():
-            player_A_name = match["player_A"]["name"]
-            player_B_name = match["player_B"]["name"]
-            challenge_name = match["challenge"]
-
-            tournament["matches"][match_name] = _play_match(
-                tournament, challenge_name, player_A_name, player_B_name
-            )
-
-            print(
-                f"    {ix}/{len(tournament['matches'])} matches re-evaluated for tournament {tournament_name.upper()}"
-            )
-            ix += 1

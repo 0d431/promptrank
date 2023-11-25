@@ -8,8 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from llm import complete
 from analyze.elo import calculate_winning_likelihoods, estimate_elo
-from competition.tournament import load_tournaments
-from src.const import TOURNAMENT
+from src.competition.loader import load_tournaments
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
@@ -367,7 +366,7 @@ def analyze_tournaments(tournaments, do_critique):
 
 
 ##############################################
-def analyze_competition(competition, tournament, player_set, do_critique):
+def analyze(competition, tournament, player_set, do_critique):
     """Analyze player performance for a given competition."""
     analyze_tournaments(
         load_tournaments(competition, tournament, player_set), do_critique

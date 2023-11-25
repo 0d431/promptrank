@@ -1,11 +1,10 @@
 import json
 import random
 import numpy as np
-from const import TOURNAMENT
 
 
 ##############################################
-def generate_leaderboard(tournament, initial_elo=1000.0):
+def generate_leaderboard(tournament):
     """Generate the current leaderboard from the match history"""
 
     tournament["leaderboard"] = {}
@@ -19,13 +18,18 @@ def generate_leaderboard(tournament, initial_elo=1000.0):
             "losses": 0,
             "draws": 0,
             "matches": 0,
+            "grades": {},
         }
 
     # re-play match history
     matches = list(tournament["matches"].values())
     random.shuffle(matches)
     for match in matches:
-        update_leaderboard(tournament, match, False)
+        update_leaderboard_with_match(tournament, match, False)
+
+    # aggregate grades
+    for grade in tournament["grades"]:
+        update_leaderboard_with_grade(tournament, grade, False)
 
     # now save
     save_leaderboard(tournament)
@@ -36,7 +40,7 @@ def save_leaderboard(tournament):
     """Persist the updated matches and the leaderboard"""
 
     competition = tournament["meta"]["competition"]["name"]
-    tournament_name = tournament["meta"][TOURNAMENT]
+    tournament_name = tournament["meta"]["tournament"]
 
     # write the leaderboard ordered by descending elo
     with open(
@@ -51,7 +55,7 @@ def save_leaderboard(tournament):
 
 
 ##############################################
-def update_leaderboard(tournament, match, save=True):
+def update_leaderboard_with_match(tournament, match, save=True):
     """Update the leaderboard based on a match"""
 
     # get player names
@@ -117,3 +121,21 @@ def update_leaderboard(tournament, match, save=True):
 
     # return updated stats
     return player_A_stats, player_B_stats
+
+
+##############################################
+def update_leaderboard_with_grade(tournament, grade, save=True):
+    """Update the leaderboard based on a grade"""
+
+    # get results
+    player_name = grade["player"]["name"]
+    grading = grade["grade"]
+
+    # update leaderboard
+    tournament["leaderboard"][player_name]["grades"][grading] = (
+        tournament["leaderboard"][player_name]["grades"].get(grading, 0) + 1
+    )
+
+    # store leaderboard
+    if save:
+        save_leaderboard(tournament)

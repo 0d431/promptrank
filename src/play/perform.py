@@ -17,10 +17,17 @@ def run_in_parallel(fun, args, max_workers=10):
 
     return results
 
+
 ##############################################
 def escape_player_name(player_name):
     """Escape a player name for use in a filename"""
     return player_name.replace("/", "=")
+
+
+##############################################
+def unescape_player_name(player_name):
+    """Unescape a player name for use in a filename"""
+    return player_name.replace("=", "/")
 
 
 ##############################################
@@ -31,26 +38,25 @@ def _get_performance_id(challenge_name, player_name):
 
 
 ##############################################
-def perform(element, challenge_name, player):
+def perform(tournament, challenge_name, player):
     """Perform a performance for a player"""
 
-    performance_file = f"competitions/{element['meta']['competition']['name']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
+    performance_file = f"competitions/{tournament['meta']['competition']['name']}/performances/{_get_performance_id(challenge_name, player['name'])}.json"
     if not os.path.exists(performance_file):
         # create the performance
-        challenge = element["challenges"][challenge_name]
+        challenge = tournament["challenges"][challenge_name]
         challenge["date"] = f"{datetime.datetime.now():%Y-%m-%d}"
         performance = {
             "player": player["name"],
             "challenge": challenge_name,
             "output": complete(
-                player["model"],
-                player["temperature"],
-                player["prompt"].format(**challenge),
                 system=player.get("system", ""),
+                prompt=player["prompt"].format(**challenge),
+                model=player["model"],
+                temperature=player["temperature"],
             ),
         }
-        element["players"][player["name"]]["performances"].append(challenge)
-
+        
         # store the performance
         with open(performance_file, "w") as file:
             json.dump(performance, file, indent=2)

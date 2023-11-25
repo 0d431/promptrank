@@ -1,11 +1,8 @@
 import re
 import json
-import numpy as np
 from llm import complete
-from competition.grading import load_grading
-from competition.loader import resolve_elements
-from const import GRADING
-from src.play.perform import *
+from src.competition.leaderboard import update_leaderboard_with_grade
+from src.play.perform import perform, escape_player_name, run_in_parallel
 
 
 ##############################################
@@ -16,14 +13,18 @@ def _get_grade_id(challenge_name, player_name):
 
 
 ##############################################
-def _find_performance(grading):
+def _find_performance(tournament, next_performances):
     """Find the next performance to grade"""
 
     # find the number of grades per player
-    gradings_by_player = {player_name: 0 for player_name in grading["players"]}
+    gradings_by_player = {player_name: 0 for player_name in tournament["players"]}
 
-    for grade in grading["grades"].values():
+    for grade in tournament["grades"].values():
         player_name = grade["player"]["name"]
+        gradings_by_player[player_name] = gradings_by_player[player_name] + 1
+
+    # add the planned gradings
+    for _, challenge_name, player_name in next_performances:
         gradings_by_player[player_name] = gradings_by_player[player_name] + 1
 
     # get the name of the player with least grades
@@ -31,28 +32,43 @@ def _find_performance(grading):
 
     # find the first challenge that this player has not yet been graded on
     next_challenge_name = None
-    for challenge_name in grading["challenges"]:
+    for challenge_name in tournament["challenges"]:
         grade_id = _get_grade_id(challenge_name, player_name)
-        if grade_id not in grading["grades"]:
-            next_challenge_name = challenge_name
-            break
+        if grade_id not in tournament["grades"]:
+            # check this is not already planned
+            found = False
+            for _, planned_challenge_name, planned_player_name in next_performances:
+                if (
+                    planned_player_name == player_name
+                    and planned_challenge_name == challenge_name
+                ):
+                    found = True
+                    break
 
-    return next_challenge_name, player_name, gradings_by_player[player_name] + 1
+            if not found:
+                next_challenge_name = challenge_name
+                break
+
+    # find next minimum number of performances graded
+    gradings_by_player[player_name] = gradings_by_player[player_name] + 1
+    next_min_performances = min(gradings_by_player.values())
+
+    return next_challenge_name, player_name, next_min_performances
 
 
 ##############################################
-def _evaluate(grading, challenge, output):
+def _evaluate(tournament, challenge, output):
     """Perform the grading of a performance"""
 
     evaluation = complete(
-        grading["evaluation"]["model"],
-        grading["evaluation"]["temperature"],
-        prompt=grading["evaluation"]["prompt"].format(
+        prompt=tournament["grading"]["prompt"].format(
             **challenge,
-            objective=grading["evaluation"]["objective"],
+            objective=tournament["grading"]["objective"],
             output=output,
         ),
-        system=grading["evaluation"].get("system", ""),
+        system=tournament["grading"].get("system", ""),
+        model=tournament["grading"]["model"],
+        temperature=tournament["grading"]["temperature"],
     )
 
     match = re.search(r"(?<=Grade: ).*?(?=\n)", evaluation)
@@ -73,22 +89,51 @@ def _evaluate(grading, challenge, output):
 
 
 ##############################################
-def _grade_performance(grading, challenge_name, player_name):
+def _grade_performance(tournament, challenge_name, player_name):
     """Grade a player's performance on a challenge"""
 
     id = _get_grade_id(challenge_name, player_name)
-    challenge = grading["challenges"][challenge_name]
-    player = grading["players"][player_name]
+    challenge = tournament["challenges"][challenge_name]
+    player = tournament["players"][player_name]
 
     # perform performances if needed
-    performance = perform(grading, challenge_name, player)
+    performance = perform(tournament, challenge_name, player)
 
     # get grade
     awarded_grade, reasoning = _evaluate(
-        grading,
+        tournament,
         challenge,
         performance["output"],
     )
+
+    # if the grade is not an A, repeat until majority decision
+    if awarded_grade not in ("A", "Z"):
+        grade_map = {"A": 0, "B": 0, "C": 0, "D": 0, "X": 0, "Z": 0}
+        grade_map[awarded_grade] = 1
+
+        while True:
+            # get grade
+            new_awarded_grade, new_reasoning = _evaluate(
+                tournament,
+                challenge,
+                performance["output"],
+            )
+
+            # update the grade map
+            grade_map[new_awarded_grade] = grade_map[new_awarded_grade] + 1
+
+            # majority now?
+            if grade_map[new_awarded_grade] > sum(grade_map.values()) / 2:
+                awarded_grade = new_awarded_grade
+                reasoning = f"MAJORITY GRADE ({str(grade_map)}): {new_reasoning}"
+                break
+
+            # give up?
+            if sum(grade_map.values()) > 10:
+                # use grade with relative majority
+                awarded_grade = max(grade_map, key=lambda k: grade_map[k])
+                reasoning = f"GAVE UP ({str(grade_map)}): {reasoning}"
+                break
 
     # create the grade record
     grade = {
@@ -103,7 +148,7 @@ def _grade_performance(grading, challenge_name, player_name):
 
     # store the match
     with open(
-        f"competitions/{grading['meta']['competition']['name']}/{GRADING}/{grading['meta'][GRADING]}/grades/{id}.json",
+        f"competitions/{tournament['meta']['competition']['name']}/tournaments/{tournament['meta']['tournament']}/grades/{id}.json",
         "w",
     ) as file:
         json.dump(grade, file, indent=2)
@@ -113,17 +158,19 @@ def _grade_performance(grading, challenge_name, player_name):
 
 ##############################################
 def grade_next_performances(
-    grading, min_performances_all_players, max_performances_to_grade=1
+    tournament, min_performances_all_players, max_performances_to_grade=1
 ):
     # find next performances to grade
     next_performances = []
     while len(next_performances) < max_performances_to_grade:
-        challenge_name, player_name, next_min_performances = _find_performance(grading)
+        challenge_name, player_name, next_min_performances = _find_performance(
+            tournament, next_performances
+        )
 
         if challenge_name is None:
             break
 
-        next_performances.append((grading, challenge_name, player_name))
+        next_performances.append((tournament, challenge_name, player_name))
 
         if next_min_performances >= min_performances_all_players:
             break
@@ -133,33 +180,8 @@ def grade_next_performances(
 
     # store
     for grade in grades:
-        grading["grades"][grade["id"]] = grade
+        tournament["grades"][grade["id"]] = grade
+        update_leaderboard_with_grade(tournament, grade)
 
     # return the new minimum number of performances graded
     return next_min_performances
-
-
-##############################################
-def grade_players(competition, grading_name, player_set, number_performances):
-    """Grade at least N matches."""
-
-    gradings = {}
-    for grading_name in resolve_elements(competition, GRADING, grading_name):
-        print(
-            f"Grading {number_performances} performances in player set {player_set.upper()} for grading {grading_name.upper()}..."
-        )
-
-        grading = load_grading(competition, grading_name, player_set)
-        gradings[grading_name] = grading
-
-        while True:
-            min_performances_all_players = grade_next_performances(
-                grading, number_performances, 10
-            )
-            print(
-                f"    {grading_name.upper()} - {len(grading['grades'])} performances graded; {min_performances_all_players:.0f}/{number_performances}"
-            )
-            if min_performances_all_players >= number_performances:
-                break
-
-    return gradings

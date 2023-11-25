@@ -1,11 +1,11 @@
 import os
 import math
 import random
-from play.duel import play
+from src.play.play import play
 from .invent import invent_player
 from .enhance import enhance_player
 from .merge import merge_players
-from analyze.analyze import analyze_tournaments
+from src.analyze.analyze import analyze_tournaments
 
 
 # The number of matches for full evaluation

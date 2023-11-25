@@ -1,2 +1,0 @@
-TOURNAMENT = "tournaments"
-GRADING = "gradings"
