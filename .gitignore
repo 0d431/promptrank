@@ -171,3 +171,5 @@ competitions/*
 competitions/example/performances/*.json
 competitions/example/tournaments/accuracy/matches/*.json
 competitions/example/tournaments/accuracy/leaderboard.json
+
+.vscode/*
