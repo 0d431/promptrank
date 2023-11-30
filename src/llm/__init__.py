@@ -1,11 +1,13 @@
 import logging
-
+from tenacity import retry, wait_random_exponential, stop_after_attempt
 from .claude_completion import get_claude_completion
 from .gpt_completion import get_gpt_chat_completion, get_gpt_completion
 from .palm_completion import get_palm_completion
+from .cohere_completion import get_cohere_completion
 
 
 ##############################################
+@retry(wait=wait_random_exponential(min=0.5, max=20), stop=stop_after_attempt(5))
 def complete(model, prompt, system="", temperature=0.0, max_tokens=750):
     """Perform a completion using the specified model"""
 
@@ -13,6 +15,7 @@ def complete(model, prompt, system="", temperature=0.0, max_tokens=750):
         "text-davinci-003": get_gpt_completion,
         "gpt-3.5-turbo-instruct": get_gpt_completion,
         "text-bison@001": get_palm_completion,
+        "command": get_cohere_completion,
     }
     chat_map = {
         "claude-instant-1": get_claude_completion,
