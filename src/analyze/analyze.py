@@ -6,6 +6,7 @@ import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import openpyxl
 from llm import complete
 from analyze.elo import calculate_winning_likelihoods, estimate_elo
 from src.competition.loader import load_tournaments
@@ -134,6 +135,11 @@ def _generate_competition_analysis(tournaments):
     observations = None
     player_names = list(next(iter(tournaments.values()))["players"])
     for tournament in tournaments.values():
+        # does this tournament have a competitive evaluation?
+        if tournament["comparison"] is None:
+            # nope, skip
+            continue
+
         leaderboard = tournament["leaderboard"]
 
         # estimate ELO
@@ -161,55 +167,56 @@ def _generate_competition_analysis(tournaments):
             aggregated_stats[player]["losses"] += leaderboard[player]["losses"]
             aggregated_stats[player]["matches"] += leaderboard[player]["matches"]
 
-    # calculate balanced score as the geomtric mean of the score per tournament
-    for player, stats in aggregated_stats.items():
-        stats["score"] = math.pow(stats["score"], 1.0 / len(tournaments))
-
-    # calc aggregate stats
-    scores = [
-        aggregated_stats[player_name]["score"] for player_name in aggregated_stats
-    ]
-
-    agg_median = np.median(scores)
-    agg_average = np.mean(scores)
-    agg_stddev = np.std(scores)
-
-    # sort by score
-    aggregated_stats = {
-        k: v
-        for k, v in sorted(
-            aggregated_stats.items(), key=lambda item: item[1]["score"], reverse=True
-        )
-    }
-
-    # get ELO
-    elo, loss = estimate_elo(observed_probs/len(tournaments), observations)
-    elo = { player_name: elo[i] for i, player_name in enumerate(player_names) }
-    print(f"LOSS: {math.sqrt(loss):.3f}")
-
-
-    # dump as markdown
-    first_tournament = next(iter(tournaments.values()))
-
     analysis = ""
-    analysis = f"\n## {first_tournament['meta']['competition']['name'].capitalize()} / {first_tournament['meta']['player_set']}\n"
-    analysis += f"{len(tournaments)} tournaments: {', '.join(tournaments.keys())}\n"
-    analysis += f"{len(first_tournament['players'])} players"
-    analysis += f"\nMedian {agg_median:.2f}; average {agg_average:.2f} +/- {agg_stddev:.2f} stddev\n"
+    if len(aggregated_stats) > 0:
+        # calculate balanced score as the geomtric mean of the score per tournament
+        for player, stats in aggregated_stats.items():
+            stats["score"] = math.pow(stats["score"], 1.0 / len(tournaments))
 
-    analysis += "\n| Player | Total Score | Total Score Dev | ELO |"
-    for tournament_name in tournaments:
-        analysis += f" {tournament_name.capitalize()} Score | {tournament_name.capitalize()} Score Dev |"
-    analysis += f"\n|---|---|---|---|{'---|'*2*len(tournaments)}\n"
+        # calc aggregate stats
+        scores = [
+            aggregated_stats[player_name]["score"] for player_name in aggregated_stats
+        ]
 
-    for player_name, player_stat in aggregated_stats.items():
-        score_stat = f"**{player_stat['score']:.2f}**<br/>{player_stat['wins']}-{player_stat['draws']}-{player_stat['losses']}"
-        analysis += f"**{player_name}**|{score_stat}|{(player_stat['score'] - agg_average)/agg_stddev:.1f}|{elo[player_name]:.0f}|"
-        for tournament in tournaments.values():
-            leaderboard = tournament["leaderboard"]
-            score_stat = f"**{leaderboard[player_name]['score']:.2f}**<br/>{leaderboard[player_name]['wins']}-{leaderboard[player_name]['draws']}-{leaderboard[player_name]['losses']}"
-            analysis += f"{score_stat}|{(leaderboard[player_name]['score'] - tournament['stats']['average'])/tournament['stats']['stddev']:.1f}|"
-        analysis += "\n"
+        agg_median = np.median(scores)
+        agg_average = np.mean(scores)
+        agg_stddev = np.std(scores)
+
+        # sort by score
+        aggregated_stats = {
+            k: v
+            for k, v in sorted(
+                aggregated_stats.items(), key=lambda item: item[1]["score"], reverse=True
+            )
+        }
+
+        # get ELO
+        elo, loss = estimate_elo(observed_probs/len(tournaments), observations)
+        elo = { player_name: elo[i] for i, player_name in enumerate(player_names) }
+        print(f"LOSS: {math.sqrt(loss):.3f}")
+
+
+        # dump as markdown
+        first_tournament = next(iter(tournaments.values()))
+
+        analysis = f"\n## {first_tournament['meta']['competition']['name'].capitalize()} / {first_tournament['meta']['player_set']}\n"
+        analysis += f"{len(tournaments)} tournaments: {', '.join(tournaments.keys())}\n"
+        analysis += f"{len(first_tournament['players'])} players"
+        analysis += f"\nMedian {agg_median:.2f}; average {agg_average:.2f} +/- {agg_stddev:.2f} stddev\n"
+
+        analysis += "\n| Player | Total Score | Total Score Dev | ELO |"
+        for tournament_name in tournaments:
+            analysis += f" {tournament_name.capitalize()} Score | {tournament_name.capitalize()} Score Dev |"
+        analysis += f"\n|---|---|---|---|{'---|'*2*len(tournaments)}\n"
+
+        for player_name, player_stat in aggregated_stats.items():
+            score_stat = f"**{player_stat['score']:.2f}**<br/>{player_stat['wins']}-{player_stat['draws']}-{player_stat['losses']}"
+            analysis += f"**{player_name}**|{score_stat}|{(player_stat['score'] - agg_average)/agg_stddev:.1f}|{elo[player_name]:.0f}|"
+            for tournament in tournaments.values():
+                leaderboard = tournament["leaderboard"]
+                score_stat = f"**{leaderboard[player_name]['score']:.2f}**<br/>{leaderboard[player_name]['wins']}-{leaderboard[player_name]['draws']}-{leaderboard[player_name]['losses']}"
+                analysis += f"{score_stat}|{(leaderboard[player_name]['score'] - tournament['stats']['average'])/tournament['stats']['stddev']:.1f}|"
+            analysis += "\n"
 
     return analysis
 
@@ -328,37 +335,57 @@ def analyze_tournaments(tournaments, do_critique):
 
     # perform analysis per tournament
     for tournament in tournaments.values():
-        # obtain the analysis
-        analysis = _generate_tournament_analysis(tournament, do_critique)
-
+        # prepare output location
         player_set = tournament["meta"]["player_set"]
-        tournament_name = tournament["meta"][TOURNAMENT]
+        tournament_name = tournament["meta"]["tournament"]
 
         path = f"competitions/{competition}/analysis/{player_set}"
         if not os.path.exists(path):
             os.makedirs(path)
 
-        with open(f"{path}/{tournament_name}.md", "w") as f:
-            f.write(
-                analysis
-                + f"\n\n### Score History\n![Score History](./{tournament_name}-score-history.png)"
-                + f"\n\n### Score Matrix\n![Score Matrix](./{tournament_name}-score-matrix.png)"
-                + f"\n\n### Game Matrix\n![Game Matrix](./{tournament_name}-game-matrix.png)"
+        # does this tournament have a competitive evaluation?
+        if tournament["comparison"] is not None:
+            # obtain the analysis
+            analysis = _generate_tournament_analysis(tournament, do_critique)
+
+            with open(f"{path}/{tournament_name}.md", "w") as f:
+                f.write(
+                    analysis
+                    + f"\n\n### Score History\n![Score History](./{tournament_name}-score-history.png)"
+                    + f"\n\n### Score Matrix\n![Score Matrix](./{tournament_name}-score-matrix.png)"
+                    + f"\n\n### Game Matrix\n![Game Matrix](./{tournament_name}-game-matrix.png)"
+                )
+
+            # plot histories
+            plot_score_history(
+                tournament["leaderboard"],
+                f"{path}/{tournament_name}-score-history.png",
             )
 
-        # plot histories
-        plot_score_history(
-            tournament["leaderboard"],
-            f"{path}/{tournament_name}-score-history.png",
-        )
+            # plot score matrix
+            plot_score_matrix(
+                tournament["players"],
+                tournament["matches"].values(),
+                f"{path}/{tournament_name}-game-matrix.png",
+                f"{path}/{tournament_name}-score-matrix.png",
+            )
 
-        # plot score matrix
-        plot_score_matrix(
-            tournament["players"],
-            tournament["matches"].values(),
-            f"{path}/{tournament_name}-game-matrix.png",
-            f"{path}/{tournament_name}-score-matrix.png",
-        )
+        # does this tournament have a grading evaluation?
+        if tournament["grading"] is not None:
+            # just export an excel with the grades
+            workbook = openpyxl.Workbook()
+            sheet = workbook.active
+            sheet.title = "Grades"
+            
+            for g in tournament["grades"].values():
+                # write header
+                if len(sheet["A"]) == 1:
+                    sheet.append(["Player", "Grade", *g["challenge_details"].keys(), "Reasoning", "Output"])
+                    
+                sheet.append([g["player"]["name"], g["grade"], *g["challenge_details"].values(), g["reasoning"], g["player_output"]])
+
+            workbook.save( f"{path}/{tournament_name}.xlsx")
+
 
     # now perform grand joint analysis
     with open(f"{path}/_analysis.md", "w") as f:
