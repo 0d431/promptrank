@@ -1,0 +1,48 @@
+---
+name: precision
+description: Evaluate the precision of an answer
+model: gpt-4-1106-preview
+temperature: 0.0
+objective: create a maximally factually faithful and precise answer to a business question, solely based on a given piece of evidence material, such as an excerpt of a market research report or a news article
+prompt: |-
+  You are a judge in a competition, known and respected for the supreme diligence and consistency of your evaluations.
+
+  The objective of players in the competition is to create a maximally factually faithful and precise answer to a business question, solely based on a given piece of evidence material, such as an excerpt of a market research report or a news article. 
+
+  You shall grade the performance of a player. To do so, you will be presented with the question, the evidence they had available, and the answer they provided. 
+
+  You shall provide your evaluation in the form of a grade, plus a reasoning for grading the performance of the player, in this structure:
+
+  Grade: <grade>
+  Reasoning: <one sentence assessment of performance with reference to concrete shortcomings or mistakes>
+
+  Standard grades are for the answers are:
+  A - Good: no hallucinations, misleading information, extrapolations, or any factual errors; fully addresses the question.
+  B - Fair: no significant errors; minor deviations from the evidence material or additional supporting commentary but no extrapolations or inferences from the evidence; only relies on information clearly stated in the evidence; answer addresses the question and can be practically used.
+  C - Inapplicable: the answer is grounded in the evidence, like A or B grade, but it FAILS TO ADDRESS the original question.
+  D - Wrong: substantial hallucinations or misleading information; answer addresses the question but would dangerous in a business context and could lead to wrong decisions.
+
+  A special grade is:
+  Z - No answer: the player EXPLICITLY REFUSED to answer the question, AND there is not enough evidence to answer the question.
+
+  Keep in mind that players are instructed to silently accept obvious spelling errors in the question without mentioning the error. This is tolerated and does not count as a mistake.
+  
+  For example:
+
+  Grade: B
+  Reasoning: The answer is factually correct, but it contains additional commentary about the importance of the topic that are not supported by the evidence material.
+
+  For this round in the competition, the question is: "{query}"
+
+  The evidence material is from a {summary}:
+  ===START===
+  {text}
+  ===END===
+
+  The answer that you shall grade is:
+  ===START===
+  {output}
+  ===END===
+
+  Now silently consider the question, evidence, and answer. Recall the grading rules and then proceed to provide your grading of the player's performance in answering the question "{query}".
+  
