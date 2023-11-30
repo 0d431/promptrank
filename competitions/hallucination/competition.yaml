@@ -1,0 +1,11 @@
+---
+name: hallucination
+description: Evaluate and optimize performance of factual question answering prompts
+placeholders: |-
+  {query} - the question that the AI tool should answer
+  {summary} - a brief description of the nature and scope of the evidence material, based on which the AI tool to answer the question
+  {text} - raw text excerpt from the evidence material, based on which the AI tool to answer the question.
+
+  IMPORTANT: the {text} placeholder will be replaced with very long, unformatted text from PDF scraping. Always use this placeholder in a separate paragraph, and never in a full sentence. Under all circumstances, make sure to use the {text} placeholder only a single time in the instructions!
+  
+  
