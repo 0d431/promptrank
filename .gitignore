@@ -172,4 +172,12 @@ competitions/example/performances/*.json
 competitions/example/tournaments/accuracy/matches/*.json
 competitions/example/tournaments/accuracy/leaderboard.json
 
+!competitions/hallucination
+
+competitions/hallucination/challenges/*
+competitions/hallucination/performances/*
+competitions/hallucination/tournaments/precision/grades/*
+competitions/hallucination/tournaments/precision/matches/*
+competitions/hallucination/tournaments/precision/leaderboard.json
+
 .vscode/*
