@@ -106,8 +106,8 @@ def _grade_performance(tournament, challenge_name, player_name):
         performance["output"],
     )
 
-    # if the grade is not an A, repeat until majority decision
-    if awarded_grade not in ("A", "Z"):
+    # DISABLED: if the grade is not an A, repeat until majority decision
+    if False and awarded_grade not in ("A", "Z"):
         grade_map = {"A": 0, "B": 0, "C": 0, "D": 0, "X": 0, "Z": 0}
         grade_map[awarded_grade] = 1
 

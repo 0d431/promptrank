@@ -168,12 +168,11 @@ credentials/
 .DS_Store
 .pylintrc
 
-competitions/
-!competitions/example
-!competitions/hallucination
+competitions/attic/
+competitions/answering/
+competitions/*/challenges/
+competitions/*/performances/
+competitions/*/tournaments/*/matches/
+competitions/*/tournaments/*/grades/
+competitions/*/tournaments/*/leaderboard.json
 
-competitions/hallucination/challenges/*
-competitions/hallucination/performances/*
-competitions/hallucination/tournaments/precision/grades/*
-competitions/hallucination/tournaments/precision/matches/*
-competitions/hallucination/tournaments/precision/leaderboard.json

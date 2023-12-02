@@ -226,7 +226,7 @@ def load_players(competition, tournament_state, player_set):
 
 ##############################################
 def load_challenges(competition, tournament_state):
-    for challenge_filename in glob.glob(f"competitions/{competition}/challenges/*"):
+    for challenge_filename in glob.glob(f"competitions/{competition}/challenges/*.json"):
         with open(challenge_filename, "r") as file:
             challenge_name = get_name_from_path(challenge_filename)
             if challenge_filename.endswith(".json"):
