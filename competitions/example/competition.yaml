@@ -1,6 +1,0 @@
----
-name: example
-description: Example competition
-placeholders: |-
-  {{input}} - the text to summarize
-  
