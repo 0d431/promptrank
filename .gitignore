@@ -175,4 +175,5 @@ competitions/*/performances/
 competitions/*/tournaments/*/matches/
 competitions/*/tournaments/*/grades/
 competitions/*/tournaments/*/leaderboard.json
+competitions/*/analysis/*/_*.xlsx
 
