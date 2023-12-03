@@ -226,13 +226,16 @@ def load_players(competition, tournament_state, player_set):
 
 ##############################################
 def load_challenges(competition, tournament_state):
-    for challenge_filename in glob.glob(f"competitions/{competition}/challenges/*.json"):
+    for challenge_filename in glob.glob(f"competitions/{competition}/challenges/*"):
         with open(challenge_filename, "r") as file:
             challenge_name = get_name_from_path(challenge_filename)
             if challenge_filename.endswith(".json"):
                 tournament_state["challenges"][challenge_name] = json.load(file)
-            else:
+            elif challenge_filename.endswith(".yaml"):
                 tournament_state["challenges"][challenge_name] = yaml.safe_load(file)
+            else:
+                print(f"      WARNING: challenge {challenge_name} has unknown format") 
+                continue                
 
             tournament_state["challenges"][challenge_name]["name"] = challenge_name
             tournament_state["challenges"][challenge_name]["updated"] = os.path.getmtime(
