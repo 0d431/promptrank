@@ -109,7 +109,7 @@ def _generate_tournament_analysis(tournament, do_critique):
 
     # dump as markdown
     analysis = ""
-    analysis = f"\n## {tournament['meta']['competition']['name'].capitalize()} / {tournament['meta'][TOURNAMENT].capitalize()} / {tournament['meta']['player_set']}\n"
+    analysis = f"\n## {tournament['meta']['competition']['name'].capitalize()} / {tournament['meta']['tournament'].capitalize()} / {tournament['meta']['player_set']}\n"
     analysis += f"{len(tournament['players'])} players, {len(tournament['challenges'])} challenges, "
     analysis += f"{len(tournament['matches'])} out of {tournament['meta']['pairings']} matches played\n"
     analysis += (
